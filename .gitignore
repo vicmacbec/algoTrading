@@ -5,3 +5,5 @@
 DataOut
 .~lock*
 gitToken.txt
+binanceKeys.txt
+Scripts/keys.R

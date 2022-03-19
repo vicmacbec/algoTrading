@@ -4,6 +4,7 @@
 # install.packages("binancer")
 # install.packages("TTR")
 library(binancer)
+library(keyring)
 library(ggplot2)
 library(scales)
 library(data.table)
@@ -34,6 +35,13 @@ historicBUSDpairs
 klines <- historicBUSDpairs
 
 (klines <- binance_klines('PERPBUSD', interval = '1d')) # 'BTCUSDT'
+
+
+
+binance_credentials(key = key_get("Binance_key"), secret = key_get("Binance_secret"))
+binance_account()
+
+
 
 
 #### Moving average ####

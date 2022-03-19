@@ -4,6 +4,7 @@
 #### Load libraries ####
 print("#### Load libraries ####")
 library(binancer)
+library(keyring)
 library(ggplot2)
 library(scales)
 library(data.table)
