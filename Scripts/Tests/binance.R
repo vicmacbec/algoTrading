@@ -38,10 +38,52 @@ klines <- historicBUSDpairs
 
 
 
+#### Binancer Functions ####
+
+# Credentials
 binance_credentials(key = key_get("Binance_key"), secret = key_get("Binance_secret"))
+
+# Information about account
+binance_ping()
 binance_account()
+binance_all_orders(c("ENJBUSD")) # SOLBUSD
+binance_balances(usdt = TRUE)[order(-usd)]
+binance_mytrades(c("SOLBUSD", "XRPBUSD", "ENJBUSD"))
 
 
+# Orders
+binance_new_order(symbol = "ENJBUSD", side = "BUY", type = "LIMIT", 
+                  quantity = 10, price = 1.20,
+                  time_in_force = "GTC", # Good til cancelled
+                  test = FALSE) 
+binance_open_orders("ENJBUSD")
+binance_query_order("ENJBUSD", order_id = 238191114) # Only works with real order_id
+binance_cancel_order("ENJBUSD", order_id = 238191114)
+
+
+# Criptos information
+binance_coins()
+binance_coins_prices()
+binance_symbols()
+binance_depth("ENJBUSD")
+binance_klines("ENJBUSD")
+binance_ticker_all_prices()
+
+
+# Binance information
+binance_exchange_info()
+binance_time()
+
+
+# Don't work
+binance_avg_price("SOLBUSD")
+binance_filters("ENJBUSD")
+binance_trades("SOLBUSD")
+binance_ticker_24hr("SOLBUSD")
+binance_ticker_all_books()
+binance_ticker_book("SOLBUSD")
+binance_ticker_price("SOLBUSD")
+binance_trades("ENJBUSD")
 
 
 #### Moving average ####
