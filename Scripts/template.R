@@ -1,5 +1,8 @@
 #### Script information ####
 
+# Trade strategy #
+
+
 
 #### Load libraries ####
 print("#### Load libraries ####")
@@ -34,6 +37,10 @@ print("#### Initial parameters ####")
 
 #### Strategy ####
 print("#### Strategy ####")
+
+
+#### Alert flags ####
+print("#### Alert flags ####")
 
 
 #### Testing strategy ####
