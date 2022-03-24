@@ -83,6 +83,8 @@ initialInvestment <- 1000
 initialRate <- 0.01
 avgRate <- 0.01
 
+limit <- 500
+
 
 for(pair in BUSDpairs){
   # pair <- "ENJBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"

@@ -69,7 +69,7 @@ for(pair in BUSDpairs){
   print("#### Strategy ####")
   
   ## Summary data: All data ##
-  allData <- rbind(allData, klines5)
+  allData <- rbind(allData, klines)
   #
   
   ## Summary data: Wicks ##
