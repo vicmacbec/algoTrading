@@ -1,10 +1,11 @@
 #### Script information ####
-
+#
 # Trade strategy #
-
+#
 # https://www.youtube.com/watch?v=rOnv5yFuqT0
-
-
+#
+# Time: 
+21:22:00
 #### Load libraries ####
 print("#### Load libraries ####")
 library(binancer)
@@ -171,6 +172,8 @@ for(pair in BUSDpairs){
   allOrders <- rbind(allOrders, orders)
 }
 allOrders
+
+
 
 # number of orders
 allOrders[, .(.N), keyby = .(symbol)] %>% View

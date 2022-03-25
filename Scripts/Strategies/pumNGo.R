@@ -1,8 +1,10 @@
 #### Script information ####
-
+#
 # Trade strategy #
-
-
+#
+#
+#
+# Time:
 
 #### Load libraries ####
 print("#### Load libraries ####")

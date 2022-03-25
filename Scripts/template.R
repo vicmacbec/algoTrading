@@ -1,7 +1,10 @@
 #### Script information ####
-
+#
 # Trade strategy #
-
+#
+#
+#
+# Time:
 
 
 #### Load libraries ####

@@ -1,19 +1,20 @@
 #### Script information ####
-
+#
 # Trade strategy #
-
+#
 # La principal bandera es RSI_flag. 
 # Si RSI_flag se activa y también está activada BB_flag, 
 # entonces en los días posteriores se debe activar BB_flag hasta que RSI_flag se desactive.
 # Cuando esto pase entonces es señal de venta o compra
-
+#
 # Si al día siguiente que se desactiva RSI_flag, sigue activado BB_flag, 
 # entonces es señal de compra o venta con mayor fuerza, porque aún sigue en descuento o a sobreprecio
-
+#
 # Seguir comprando o vendiendo si el precio baja o sube respectivamente 
 # para ir promediando (con respecto a la compra o venta de la alerta) 
 # hasta que se confirme cambio de tendencia con el MACD
-
+#
+# Time:  5:30 min
 
 # Notes #
 
