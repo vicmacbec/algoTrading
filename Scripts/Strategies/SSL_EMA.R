@@ -4,8 +4,8 @@
 #
 # https://www.youtube.com/watch?v=rOnv5yFuqT0
 #
-# Time: 
-21:22:00
+# Time: 14:38 min
+
 #### Load libraries ####
 print("#### Load libraries ####")
 library(binancer)
@@ -55,13 +55,21 @@ allOrders <- NULL
 # avgRate <- 0.01
 
 limit <- 1000
-
+days <- 10
 
 for(pair in BUSDpairs){
-  # pair <- "BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
+  # pair <- "AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
   print(pair)
   
-  klines <- binance_klines(pair, limit = limit, interval = '5m') # 'BTCUSDT'
+  # klines <- binance_klines(pair, limit = limit, interval = '5m') # 'BTCUSDT'
+  # klines <- binance_klines(pair, limit = limit, interval = '5m', start_time = '2021-12-03')
+  klines <- NULL
+  for(day in days:0){
+    tmp <- binance_klines(pair, limit = 24*60/5, interval = '5m', start_time = Sys.Date() - day)
+    klines <- rbind(klines, tmp)
+  }
+  klines
+  
   print(paste0("Number of registers from ", pair, " pair: ", klines %>% nrow()))
   print("")
   
@@ -171,51 +179,89 @@ for(pair in BUSDpairs){
   }
   allOrders <- rbind(allOrders, orders)
 }
+allData
 allOrders
 
 
-
 # number of orders
-allOrders[, .(.N), keyby = .(symbol)] %>% View
+allOrders[, .(numOrders = .N), keyby = .(symbol)] -> numOrders
+numOrders %>% View
 # Analysis Time
 allOrders[, .(time = difftime(max(order_closeTime), min(order_openTime), units = "days")), keyby = .(symbol)
           ][order(-time)]
 # summary of number of candles
 allOrders[, .(symbol, candels = as.numeric(difftime(order_closeTime, order_openTime, units = "min"))/5)
-          ][, .(min = min(candels), 
-                fQ = quantile(candels, 0.25), 
-                median = quantile(candels, 0.5), 
-                mean = mean(candels), 
-                tQ = quantile(candels, 0.75), 
-                max = max(candels)), 
-            keyby = .(symbol)] %>% View
+          ][, .(minNumCandels = min(candels), 
+                fQNumCandels = quantile(candels, 0.25), 
+                medianNumCandels = quantile(candels, 0.5), 
+                meanNumCandels = mean(candels), 
+                tQNumCandels = quantile(candels, 0.75), 
+                maxNumCandels = max(candels)), 
+            keyby = .(symbol)] -> summaryNumCandels
+summaryNumCandels %>% View
 # win rate
 merge(allOrders[rate >= 0, .(wins = .N), keyby = .(symbol)],
       allOrders[, .(numOrders = .N), keyby = .(symbol)],
       by = c("symbol"),
       all = TRUE
-      )[, .(symbol, wins, numOrders, winRate = wins / numOrders)] %>% View
+      )[, .(symbol, wins, numOrders, winRate = wins / numOrders)] -> winRate
+winRate %>% View
 # Yields: summary by symbol
-allOrders[, .(min = min(rate), 
-              fQ = quantile(rate, 0.25), 
-              median = quantile(rate, 0.5), 
-              mean = mean(rate), 
-              tQ = quantile(rate, 0.75), 
-              max = max(rate)), 
-          keyby = .(symbol)] %>% View
+allOrders[, .(minYields = min(rate), 
+              fQYields = quantile(rate, 0.25), 
+              medianYields = quantile(rate, 0.5), 
+              meanYields = mean(rate), 
+              tQYields = quantile(rate, 0.75), 
+              maxYields = max(rate)), 
+          keyby = .(symbol)] -> summaryYields
+summaryYields %>% View
 # Yields: cumprod
-allOrders[, .(yield = cumprod(1 + rate)), keyby = .(symbol)]
-allOrders[, .(yield = cumprod(1 + rate)), keyby = .(symbol)][, .SD[.N], keyby = .(symbol)] %>% View
+allOrders[, .(order_openTime, yield = cumprod(1 + rate)), keyby = .(symbol)] #%>% View
+allOrders[, .(order_openTime, yield = cumprod(1 + rate)), keyby = .(symbol)
+          ][order(order_openTime)
+            ][, .SD[.N], keyby = .(symbol)][, .(symbol, yield)] -> cumprodYields
+cumprodYields %>% View
 # Yield per day
-merge(allOrders[, .(yield = cumprod(1 + rate)), keyby = .(symbol)][, .SD[.N], keyby = .(symbol)],
+merge(allOrders[, .(order_openTime, yield = cumprod(1 + rate)), keyby = .(symbol)][order(order_openTime)][, .SD[.N], keyby = .(symbol)],
       allOrders[, .(time = difftime(max(order_closeTime), min(order_openTime), units = "days")), keyby = .(symbol)],
       by = c("symbol"),
       all = TRUE
-      )[, .(symbol, yield, time, yieldPerDay = (yield - 1)/as.numeric(time))] %>% View
+      )[, .(symbol, yield, time, yieldPerDay = (yield - 1)/as.numeric(time))] -> dayYield
+dayYield %>% View
+
+
+# ¿De qué depende que sea un buen symbol?
+# winRate, rendimientos, 
+merge(winRate,
+      merge(summaryYields,
+            merge(dayYield,
+                  summaryNumCandels,
+                  by = "symbol",
+                  all = TRUE
+                  ),
+            by = "symbol",
+            all = TRUE
+            ),
+      by = "symbol",
+      all = TRUE
+      ) -> summaryAll
+summaryAll %>% View
+
+# ¿Cómo se correlaciona el winRate, medianYields, meanYields, yield?
 
 
 #### Plots ####
 print("#### Plots ####")
+
+p <- ggplot(summaryAll[symbol != "APEBUSD"], 
+            aes(color = winRate, y = yield, x = tQYields, text = paste0("symbol: ", symbol))) +
+  geom_point() +
+  scale_color_gradient(low="blue", high="red")
+p %>% ggplotly()
+
+# Hacer más notorios los cambios de colores
+# Cambiar ejes 
+# Agregar nombre de symbol en cajita
 
 
 #### Saving data ####
