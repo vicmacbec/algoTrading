@@ -174,27 +174,31 @@ print("#### Plots ####")
 ggplot(klines, aes(close_time, close)) + geom_line()
 
 
-ggplot(klines, aes(open_time)) +
+p <- ggplot(klines, aes(open_time)) +
   geom_linerange(aes(ymin = open, ymax = close, color = close < open), size = 2) +
   geom_errorbar(aes(ymin = low, ymax = high), size = 0.25) +
   theme_bw() + theme('legend.position' = 'none') + xlab('') +
   ggtitle(paste('Last Updated:', Sys.time())) +
   scale_y_continuous(labels = dollar) +
-  scale_color_manual(values = c('#1a9850', '#d73027')) # RdYlGn
+  scale_color_manual(values = c('#1a9850', '#d73027')) + # RdYlGn
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+p
+p %>% ggplotly()
 
 
-klines <- rbindlist(lapply(
+klines5 <- rbindlist(lapply(
   c('ETHBTC', 'ARKBTC', 'NEOBTC', 'IOTABTC'),
   binance_klines,
   interval = '15m',
   limit = 4*24))
-ggplot(klines, aes(open_time)) +
+ggplot(klines5, aes(open_time)) +
   geom_linerange(aes(ymin = open, ymax = close, color = close < open), size = 2) +
   geom_errorbar(aes(ymin = low, ymax = high), size = 0.25) +
   theme_bw() + theme('legend.position' = 'none') + xlab('') +
   ggtitle(paste('Last Updated:', Sys.time())) +
   scale_color_manual(values = c('#1a9850', '#d73027')) +
-  facet_wrap(~symbol, scales = 'free', nrow = 2)
+  facet_wrap(~symbol, scales = 'free', nrow = 2) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 
 
