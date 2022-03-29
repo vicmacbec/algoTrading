@@ -160,6 +160,15 @@ for(pair in BUSDpairs){
                       rate = (klines2[candle, close] - price_0)/price_0,
                       riskRewardRatio = ((klines2[candle, close] - price_0)/price_0) / ((-stopLoss + price_0)/price_0))]
           
+          # Revisar si algún orden abierta tocó stop Loss o subir stop Loss
+          orders[active == 1 & klines2[candle, low] < stopLoss]
+          orders[active == 1 & klines2[candle, low] < stopLoss, 
+                 ':='(order_closeTime = klines2[candle, close_time],
+                      active = 0,
+                      price_f = stopLoss,
+                      rate = (stopLoss - price_0)/price_0,
+                      riskRewardRatio = 0)]
+          
           sslCross <- FALSE
         }else{ # Si ya se había hecho el cambio a negativo
           if(!is.null(orders)){ # Revisa si orders está recien creado o ya tiene información
