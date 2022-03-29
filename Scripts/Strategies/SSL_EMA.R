@@ -12,12 +12,13 @@ print("#### Load libraries ####")
 library(binancer)
 library(keyring)
 library(ggplot2)
+library(tidyquant)
+library(plotly)
 library(scales)
 library(data.table)
 library(TTR)
 library(stringr)
 library(zoo)
-library(plotly)
 library(purrr)
 library(roll)
 library(patchwork)
@@ -56,9 +57,15 @@ summaryAll_all <- NULL
 # initialRate <- 0.01
 # avgRate <- 0.01
 
+# Down:         "2022-01-10" 
+# Up:           "2021-10-08" 
+# Lateral Up:   "2022-02-03" 
+# Lateral Down: "2021-07-20"
+# Last day:     Sys.Date() 
+date <- Sys.Date() # as.Date("2022-01-10") 
 limit <- 1000
 days <- 10
-date <- as.Date("2021-10-08") # "2022-01-10" "2021-10-08" "2022-02-03" "2021-07-20", Sys.Date() # Last day
+
 
 for(pair in BUSDpairs){
   # pair <- "AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
@@ -71,7 +78,9 @@ for(pair in BUSDpairs){
     tmp <- binance_klines(pair, limit = 24*60/5, interval = '5m', start_time = date - day)
     klines <- rbind(klines, tmp)
   }
+  klines[, ':='(open_time = open_time + 6*60*60, close_time = close_time + 6*60*60)] # Add 6 hours to match with TrendingView
   klines
+  
   
   print(paste0("Number of registers from ", pair, " pair: ", klines %>% nrow()))
   print("")
@@ -101,8 +110,7 @@ for(pair in BUSDpairs){
   #   - Si son muchos NA y -1 consecutivos, salir en la próxima vela con ganancias
   # Si recorrerlos hacia abajo con el último Hlv encontrado o ver cómo manejarlo.
   # Probar con diferentes parámetros
-  # Calcular stop loss
-  # Probar con y sin EMA.
+  
   
   #### Alert flags ####
   print("#### Alert flags ####")
@@ -110,18 +118,20 @@ for(pair in BUSDpairs){
   #### Testing strategy ####
   print("#### Testing strategy ####")
   
-  # Tomando en cuenta solo SSL, sin EMA
+  # Tomando en cuenta SSL con EMA
   orders <- NULL 
   sslCross <- FALSE
-  validCandle <- klines2[, sum(is.na(Hlv2))] + 1 # Count the candles until the first no NA value 
+  validCandle <- klines2[, sum(is.na(ema))] + 1 # Count the candles until the first no NA value 
   for(candle in validCandle:nrow(klines2)){
-  # for(candle in 898:944){
-    # candle <- 898 # 898
+  # for(candle in 200:560){
+    # candle <- validCandle 12 # 898
     # candle <- candle + 1
-    # print(candle)
+    print(candle)
     
-    # klines2[candle, Hlv2] == 1 & !sslCross
-    if(klines2[candle, Hlv2] == 1 & !sslCross){
+    # Open an order
+    # klines2[candle, Hlv2] == 1 & !sslCross & klines2[candle, ema < close]
+    # klines2[candle]
+    if(klines2[candle, Hlv2] == 1 & !sslCross & klines2[candle, ema < close]){
       sslCross <- TRUE
       
       klines2[candle, 
@@ -159,6 +169,15 @@ for(pair in BUSDpairs){
                       price_f = klines2[candle, close],
                       rate = (klines2[candle, close] - price_0)/price_0,
                       riskRewardRatio = ((klines2[candle, close] - price_0)/price_0) / ((-stopLoss + price_0)/price_0))]
+          
+          # Revisar si algún orden abierta tocó stop Loss o subir stop Loss
+          # orders[active == 1 & klines2[candle, low] < stopLoss]
+          orders[active == 1 & klines2[candle, low] < stopLoss, 
+                 ':='(order_closeTime = klines2[candle, close_time],
+                      active = 0,
+                      price_f = stopLoss,
+                      rate = (stopLoss - price_0)/price_0,
+                      riskRewardRatio = 0)]
           
           sslCross <- FALSE
         }else{ # Si ya se había hecho el cambio a negativo
@@ -328,22 +347,23 @@ p %>% ggplotly()
 
 
 
-p <- ggplot(allData[symbol == "SHIBBUSD"], aes(open_time)) +
+p <- ggplot(allData[symbol == pair], aes(open_time)) +
   geom_linerange(aes(ymin = open, ymax = close, color = close < open), size = 2) +
   geom_errorbar(aes(ymin = low, ymax = high), size = 0.25) +
   theme_bw() + theme('legend.position' = 'none') + xlab('') +
-  ggtitle(paste('Last Updated:', Sys.time())) +
+  ggtitle(paste('Symbol:', pair, 'Last Updated:', Sys.time())) +
   scale_y_continuous(labels = dollar) +
   scale_color_manual(values = c('#1a9850', '#d73027')) + # RdYlGn
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+p
 p %>% ggplotly()
 
 
-ggplot(klines5, aes(open_time)) +
+ggplot(klines2, aes(open_time)) +
   geom_linerange(aes(ymin = open, ymax = close, color = close < open), size = 2) +
   geom_errorbar(aes(ymin = low, ymax = high), size = 0.25) +
   theme_bw() + theme('legend.position' = 'none') + xlab('') +
-  ggtitle(paste('Last Updated:', Sys.time())) +
+  ggtitle(paste('Symbol:', pair, 'Last Updated:', Sys.time())) +
   scale_color_manual(values = c('#1a9850', '#d73027')) +
   facet_wrap(~symbol, scales = 'free', nrow = 2)
 
