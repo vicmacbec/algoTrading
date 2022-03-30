@@ -71,6 +71,8 @@ for(pair in BUSDpairs){
     tmp <- binance_klines(pair, limit = 24*60/5, interval = '5m', start_time = date - day)
     klines <- rbind(klines, tmp)
   }
+  klines <- klines[order(open_time)] %>% unique()
+  klines[, ':='(open_time = open_time + 6*60*60, close_time = close_time + 6*60*60)] # Add 6 hours to match with TrendingView
   klines
   
   print(paste0("Number of registers from ", pair, " pair: ", klines %>% nrow()))
