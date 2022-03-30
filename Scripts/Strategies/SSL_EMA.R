@@ -62,9 +62,9 @@ summaryAll_all <- NULL
 # Lateral Up:   "2022-02-03" 
 # Lateral Down: "2021-07-20"
 # Last day:     Sys.Date() 
-date <- Sys.Date() # as.Date("2022-01-10") 
+date <- as.Date("2022-01-10") 
 limit <- 1000
-days <- 10
+days <- 365
 
 
 for(pair in BUSDpairs){
@@ -78,6 +78,7 @@ for(pair in BUSDpairs){
     tmp <- binance_klines(pair, limit = 24*60/5, interval = '5m', start_time = date - day)
     klines <- rbind(klines, tmp)
   }
+  klines <- klines[order(open_time)] %>% unique()
   klines[, ':='(open_time = open_time + 6*60*60, close_time = close_time + 6*60*60)] # Add 6 hours to match with TrendingView
   klines
   
@@ -126,7 +127,7 @@ for(pair in BUSDpairs){
   # for(candle in 200:560){
     # candle <- validCandle 12 # 898
     # candle <- candle + 1
-    print(candle)
+    # print(candle)
     
     # Open an order
     # klines2[candle, Hlv2] == 1 & !sslCross & klines2[candle, ema < close]
@@ -147,8 +148,8 @@ for(pair in BUSDpairs){
       
       orders <- rbind(orders, tmp)
     }else{
-      # klines2[candle, Hlv2] == 1
-      if(klines2[candle, Hlv2] == 1){
+      # klines2[candle, Hlv2] == 1 & !is.null(orders)
+      if(klines2[candle, Hlv2] == 1 & !is.null(orders)){
         # Mismo cruce: Revisar si algún orden abierta tocó stop Loss o subir stop Loss
         # orders[active == 1 & klines2[candle, low] < stopLoss]
         orders[active == 1 & klines2[candle, low] < stopLoss, 
@@ -277,6 +278,8 @@ merge(winRate,
       all = TRUE
       ) -> summaryAll
 summaryAll %>% View
+
+fwrite(summaryAll, "./DataOut/SSL_EMA/summaryAll.csv", append = TRUE)
 
 summaryAll_all <- summaryAll
 summaryAll_all <- merge(summaryAll_all, 
