@@ -68,7 +68,7 @@ days <- 365
 
 
 for(pair in BUSDpairs){
-  # pair <- "AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
+  # pair <- "BTCBUSD""AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
   print(pair)
   
   # klines <- binance_klines(pair, limit = limit, interval = '5m') # 'BTCUSDT'
@@ -204,6 +204,7 @@ for(pair in BUSDpairs){
   allOrders <- rbind(allOrders, orders)
 }
 allData[as.Date(open_time) <= date] %>% View
+
 allOrders[as.Date(order_closeTime) <= date] %>% View
 
 
@@ -378,3 +379,63 @@ print("#### Saving data ####")
 
 #### Tests ####
 
+# Yield tests #
+
+# Initial data
+feeRate <- (1-0.00075) 
+initialCapital <- 10
+rate <- 0.008033788
+
+# First fee attempt
+buy <- feeRate*initialCapital
+sell <- buy*(1+rate)*feeRate # feeRate*initialCapital*(1+rate)*feeRate = feeRate²*initialCapital*(1+rate)
+initialCapital <- sell
+
+# (1/feeRate**2)-1 is the minimum rate to be profency
+rate >= (1/feeRate**2)-1
+
+# Initial data with prices
+price_s <- 33921.73 
+price_f <- 34194.25   
+yield <- 0.008033788
+
+btc <- initialCapital/price_s
+finalCapital <- btc*price_f
+
+# Prove of yield doesn't depend of capital
+yield2 <- (finalCapital-initialCapital)/initialCapital
+# yield2 \eq (price_f-price_s)/price_s \eq yield
+
+# From fees documentation (https://www.binance.com/en/support/faq/e85d6e703b874674840122196b89780a)
+(btc <- initialCapital/price_s)
+(feeBuy <- 0.00075*btc)
+(finalCapital <- (btc-feeBuy)*price_f)
+(feeSell <- 0.00075*btc*price_f) # Aquí está la diferencia con "first fee attempt", feeSell va sobre btc, no sobre (btc-feeBuy)
+
+# Real final capital after fees
+(finalCapital-feeSell)
+
+# ENJBUSD example (order No. 239712854)
+8.8*1.666
+8.8*1.666*0.00075 # fee calculation
+0.00002640*415.94 # BNB fee
+
+
+# Real field
+realYield <- ((finalCapital-feeSell) - initialCapital)/initialCapital
+
+# Difference between yield without fees and yield with fees
+yield2 - realYield
+
+# Despejando realYield. realYield doesn't depend of capital, just price
+((btc-feeBuy)*price_f - 0.00075*btc*price_f - initialCapital)/initialCapital
+((initialCapital/price_s - 0.00075*btc)*price_f - 0.00075*btc*price_f - initialCapital)/initialCapital
+((initialCapital/price_s - 0.00075*initialCapital/price_s)*price_f - 0.00075*(initialCapital/price_s)*price_f - initialCapital)/initialCapital
+(price_f/price_s - 0.00075*price_f/price_s - 0.00075*price_f/price_s - 1)
+((1 - 0.00075 - 0.00075)*price_f/price_s) - 1
+((1 - 2*0.00075)*price_f/price_s) - 1
+((1 - 2*0.00075)*price_f/price_s) - price_s/price_s
+((1 - 2*0.00075)*price_f - price_s)/price_s # realYield = ((1-2fee)*price_f - price_s)/price_s
+
+# Constanta que multiplica a price_f en realYield, tiene semejanza a fee**2
+(1-0.00075)*(1-0.00075) = 1 - 2*0.00075 + 0.00075**2
