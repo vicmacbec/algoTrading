@@ -24,6 +24,8 @@ library(roll)
 library(patchwork)
 
 
+options(scipen=999)
+
 #### Functions ####
 print("#### Functions ####")
 
@@ -65,10 +67,10 @@ summaryAll_all <- NULL
 date <- as.Date("2022-01-10") 
 limit <- 1000
 days <- 365
-
+fees <- 0.00075
 
 for(pair in BUSDpairs){
-  # pair <- "BTCBUSD""AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
+  # pair <- "AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
   print(pair)
   
   # klines <- binance_klines(pair, limit = limit, interval = '5m') # 'BTCUSDT'
@@ -144,6 +146,7 @@ for(pair in BUSDpairs){
                 price_f = close,
                 stopLoss = sslDown,
                 rate = 0.0,
+                realYield = 0.0,
                 riskRewardRatio = 0.0)] -> tmp
       
       orders <- rbind(orders, tmp)
@@ -157,6 +160,7 @@ for(pair in BUSDpairs){
                     active = 0,
                     price_f = stopLoss,
                     rate = (stopLoss - price_0)/price_0,
+                    realYield = ((1 - 2*fees)*stopLoss - price_0)/price_0,
                     riskRewardRatio = 0)]
       }else{
         # Tendencia bajista: Ver si se cierra orden o si se deja abierta hasta nuevo cruce
@@ -169,6 +173,7 @@ for(pair in BUSDpairs){
                       active = 0,
                       price_f = klines2[candle, close],
                       rate = (klines2[candle, close] - price_0)/price_0,
+                      realYield = ((1 - 2*fees)*klines2[candle, close] - price_0)/price_0,
                       riskRewardRatio = ((klines2[candle, close] - price_0)/price_0) / ((-stopLoss + price_0)/price_0))]
           
           # Revisar si algún orden abierta tocó stop Loss o subir stop Loss
@@ -178,6 +183,7 @@ for(pair in BUSDpairs){
                       active = 0,
                       price_f = stopLoss,
                       rate = (stopLoss - price_0)/price_0,
+                      realYield = ((1 - 2*fees)*stopLoss - price_0)/price_0,
                       riskRewardRatio = 0)]
           
           sslCross <- FALSE
@@ -190,6 +196,7 @@ for(pair in BUSDpairs){
                         active = 0,
                         price_f = stopLoss,
                         rate = (stopLoss - price_0)/price_0,
+                        realYield = ((1 - 2*fees)*stopLoss - price_0)/price_0,
                         riskRewardRatio = 0)] 
           }
         }
@@ -206,6 +213,7 @@ for(pair in BUSDpairs){
 allData[as.Date(open_time) <= date] %>% View
 
 allOrders[as.Date(order_closeTime) <= date] %>% View
+allOrders[, .(rate, realYield, rate - realYield, rate/realYield)][order(-V3)] # The biggest the rate, the biggest the realYield
 
 
 # number of orders
@@ -234,6 +242,14 @@ merge(allOrders[as.Date(order_closeTime) <= date & rate >= 0, .(wins = .N), keyb
       all = TRUE
       )[, .(symbol, wins, numOrders, winRate = wins / numOrders)] -> winRate
 winRate %>% View
+# win rate after fees
+merge(allOrders[as.Date(order_closeTime) <= date & realYield >= 0, .(wins = .N), keyby = .(symbol)],
+      allOrders[as.Date(order_closeTime) <= date, .(numOrders = .N), keyby = .(symbol)],
+      by = c("symbol"),
+      all = TRUE
+      )[, .(symbol, wins, numOrders, winRate = wins / numOrders)] -> winRealYield
+winRealYield %>% View
+
 # Yields: summary by symbol
 allOrders[as.Date(order_closeTime) <= date, 
           .(minYields = min(rate), 
@@ -262,12 +278,41 @@ merge(allOrders[as.Date(order_closeTime) <= date,
       )[, .(symbol, yield, time, yieldPerDay = (yield - 1)/as.numeric(time))] -> dayYield
 dayYield %>% View
 
+# Yields after fees: summary by symbol
+allOrders[as.Date(order_closeTime) <= date, 
+          .(minYields = min(realYield), 
+            fQYields = quantile(realYield, 0.25), 
+            medianYields = quantile(realYield, 0.5), 
+            meanYields = mean(realYield), 
+            tQYields = quantile(realYield, 0.75), 
+            maxYields = max(realYield)), 
+          keyby = .(symbol)] -> summaryRealYields
+summaryRealYields %>% View
+# Yields after fees: cumprod
+allOrders[as.Date(order_closeTime) <= date, .(order_openTime, rate, yield = cumprod(1 + rate), realYield, realYield2 = cumprod(1 + realYield)), keyby = .(symbol)] %>% View
+allOrders[as.Date(order_closeTime) <= date, .(order_openTime, realYield2 = cumprod(1 + realYield)), keyby = .(symbol)] #%>% View
+allOrders[as.Date(order_closeTime) <= date, .(order_openTime, realYield2 = cumprod(1 + realYield)), keyby = .(symbol)
+          ][order(order_openTime)
+            ][, .SD[.N], keyby = .(symbol)][, .(symbol, realYield2)] -> cumprodRealYields
+cumprodRealYields %>% View
+# Yields after fees per day
+merge(allOrders[as.Date(order_closeTime) <= date, 
+                .(order_openTime, realYield2 = cumprod(1 + realYield)), 
+                keyby = .(symbol)][order(order_openTime)][, .SD[.N], keyby = .(symbol)],
+      allOrders[as.Date(order_closeTime) <= date, 
+                .(time = difftime(max(order_closeTime), min(order_openTime), units = "days")), 
+                keyby = .(symbol)],
+      by = c("symbol"),
+      all = TRUE
+      )[, .(symbol, realYield2, time, realYieldPerDay = (realYield2 - 1)/as.numeric(time))] -> dayRealYield
+dayRealYield %>% View
+
 
 # ¿De qué depende que sea un buen symbol?
 # winRate, rendimientos, 
-merge(winRate,
-      merge(summaryYields,
-            merge(dayYield,
+merge(winRealYield,
+      merge(summaryRealYields,
+            merge(dayRealYield,
                   summaryNumCandels,
                   by = "symbol",
                   all = TRUE
@@ -282,14 +327,14 @@ summaryAll %>% View
 
 fwrite(summaryAll, "./DataOut/SSL_EMA/summaryAll.csv", append = TRUE)
 
-summaryAll_all <- summaryAll
-summaryAll_all <- merge(summaryAll_all, 
-                        summaryAll[, .(symbol, wins, numOrders, winRate, 
-                                       minYields, fQYields, medianYields, meanYields, tQYields, maxYields,
-                                       yield, time, yieldPerDay)],
-                        by = c("symbol"),
-                        all = TRUE
-                        )
+# summaryAll_all <- summaryAll
+# summaryAll_all <- merge(summaryAll_all, 
+#                         summaryAll[, .(symbol, wins, numOrders, winRate, 
+#                                        minYields, fQYields, medianYields, meanYields, tQYields, maxYields,
+#                                        yield, time, yieldPerDay)],
+#                         by = c("symbol"),
+#                         all = TRUE
+#                         )
 
 # ¿Cómo se correlaciona el winRate, medianYields, meanYields, yield?
 
@@ -299,14 +344,14 @@ print("#### Plots ####")
 
 # Cambiar ejes 
 p <- ggplot(summaryAll[symbol != "APEBUSD"], # Se comenta outlier
-            aes(color = winRate, y = yield, x = tQYields, text = paste0("symbol: ", symbol))) +
+            aes(color = winRate, y = realYield2, x = tQYields, text = paste0("symbol: ", symbol))) +
   geom_point() +
   scale_color_gradient(low="blue", high="red") +
   geom_hline(yintercept = 1, linetype='dotted')
 p %>% ggplotly()
 
 p <- ggplot(summaryAll[symbol != "APEBUSD"], # Se comenta outlier
-            aes(color = winRate, y = yield, x = fQYields, text = paste0("symbol: ", symbol))) +
+            aes(color = winRate, y = realYield2, x = fQYields, text = paste0("symbol: ", symbol))) +
   geom_point() +
   scale_color_gradient(low="blue", high="red") +
   geom_hline(yintercept = 1, linetype='dotted')
@@ -314,14 +359,14 @@ p %>% ggplotly()
 
 
 # Poner por color winRate y/o yields y/o riskReward (hacer merge primero)
-p <- ggplot(allOrders[as.Date(order_closeTime) <= date, .(symbol, rate)], 
-            aes(x = symbol, y = rate, color = symbol)) +
+p <- ggplot(allOrders[as.Date(order_closeTime) <= date, .(symbol, realYield)], 
+            aes(x = symbol, y = realYield, color = symbol)) +
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 p %>% ggplotly()
 
-merge(merge(allOrders[as.Date(order_closeTime) <= date, .(symbol, rate)],
-            winRate,
+merge(merge(allOrders[as.Date(order_closeTime) <= date, .(symbol, realYield)],
+            winRealYield,
             by = "symbol",
             all = TRUE),
       dayYield,
@@ -329,16 +374,16 @@ merge(merge(allOrders[as.Date(order_closeTime) <= date, .(symbol, rate)],
       all = TRUE) -> allYields
 
 p <- ggplot(allYields[symbol != "APEBUSD", 
-                      .(symbol, rate, winRate, yield)], # Se quita outlier
-            aes(x = reorder(symbol, -yield), y = rate, color = yield, text = paste0("winRate: ", winRate ))) +
+                      .(symbol, realYield, winRate, yield)], # Se quita outlier
+            aes(x = reorder(symbol, -yield), y = realYield, color = yield, text = paste0("winRate: ", winRate ))) +
   geom_boxplot() +
   scale_color_gradient(low="blue", high="red") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 p %>% ggplotly()
 
 p <- ggplot(allYields[symbol != "APEBUSD", 
-                      .(symbol, rate, winRate, yield)], # Se quita outlier
-            aes(x = reorder(symbol, -winRate), y = rate, color = winRate, text = paste0("yield: ", yield ))) +
+                      .(symbol, realYield, winRate, yield)], # Se quita outlier
+            aes(x = reorder(symbol, -winRate), y = realYield, color = winRate, text = paste0("yield: ", yield ))) +
   geom_boxplot() +
   scale_color_gradient(low="blue", high="red") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
