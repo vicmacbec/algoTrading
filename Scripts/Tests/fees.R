@@ -65,4 +65,20 @@ r >= 2*fee / (1 - fee)
 ((1 + r)*(1 - fee) - fee - 1)
 (1 - fee + r - r*fee - fee - 1)
 (r - r*fee - 2*fee)
-(r*(1 - fee) - 2*fee)
+(r*(1 - fee) - 2*fee) # (1-fee) is the slope and -2*fee is the intersect
+
+
+# Real Yield plot:
+rates <- seq(-2, 2, 0.01)
+
+plot(x = rates, y = (rates*(1 - fee) - 2*fee))
+
+# Diferencia entre real yield y yield sin fees
+rates - (rates*(1 - fee) - 2*fee)
+rates - (rates - rates*fee - 2*fee)
+rates*fee + 2*fee
+(rates + 2)*fee # Entre más grande sea el yield, mayor es el fee. 
+# ¿Si pierdes más de 200 %, te pagan?
+plot(x = rates, y = (rates + 2)*fee)
+
+
