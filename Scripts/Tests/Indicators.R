@@ -37,7 +37,7 @@ print("#### Load data ####")
 # binance_coins()
 # binance_coins_prices() #%>% View
 binance_symbols() %>% grep(pattern = "^BUSD|*BUSD", value = TRUE) -> BUSDpairs
-klines <- binance_klines('ENJBUSD', interval = '1d') # 'BTCUSDT'
+klines <- binance_klines('ENJBUSD', interval = '4h') # 'BTCUSDT'
 
 
 #### Initial parameters ####
@@ -164,6 +164,35 @@ klines5[, .(symbol, open_time, close,
             baseTradePrice, baseTradePrice_cum, tradePrice)] %>% View
 
 
+#### Moving Average Slope ####
+
+rad2degree <- 180/3.14159265359
+
+klines <- binance_klines('SOLBUSD', interval = '4h') # 'BTCUSDT'
+klines[, ohlc4 := (open + high + low + close)/4]
+
+# EMA of ohlc4
+klines[, ema := EMA(ohlc4, 55)]
+klines[, ema_lag :=  c(NA, ema[-.N])] # ema ohlc4 lag
+
+# ATR
+klines[, c("tr", "atr", "trueHigh", "trueLow") := ATR(klines[, .(high, low, close)], 14) %>% data.table()]
+
+# MA Slope
+klines[, maSlope := rad2degree*atan((ema - ema_lag)/atr)]
+klines2 <- klines[, .(symbol, open_time, open, high, low, close, volume, close_time, trades, 
+                      ohlc4, ema, atr, maSlope)]
+
+
+#### ATR Stop Loss ####
+
+multiplier <- 1.5
+
+klines2[, shortStopLoss := close + atr * multiplier]
+klines2[, longStopLoss := close - atr * multiplier]
+klines2
+
+
 #### Testing strategy ####
 print("#### Testing strategy ####")
 
@@ -177,6 +206,7 @@ ggplot(klines, aes(close_time, close)) + geom_line()
 p <- ggplot(klines, aes(open_time)) +
   geom_linerange(aes(ymin = open, ymax = close, color = close < open), size = 2) +
   geom_errorbar(aes(ymin = low, ymax = high), size = 0.25) +
+  # geom_line(aes(y = ohlc4)) +
   theme_bw() + theme('legend.position' = 'none') + xlab('') +
   ggtitle(paste('Last Updated:', Sys.time())) +
   scale_y_continuous(labels = dollar) +
