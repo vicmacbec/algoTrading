@@ -52,10 +52,13 @@ summaryAll_all <- NULL
 date <- Sys.Date() #as.Date("2022-01-10") 
 limit <- 1000
 days <- 365
-fees <- 0.00075
+fee <- 0.00075
+
+BUSDpairs <- c("ETHBUSD", "SANDBUSD", "SOLBUSD", "ADABUSD", "XRPBUSD", "LUNABUSD", "BTCBUSD", 
+               "BNBBUSD", "AVAXBUSD", "DOGEBUSD", "DOTBUSD", "SHIBBUSD", "ENJBUSD", "AXSBUSD", "APEBUSD")
 
 for(pair in BUSDpairs){
-  # pair <- "BTCBUSD""AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
+  # pair <- "ENJBUSD""AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
   print(pair)
   
   # klines <- binance_klines(pair, limit = limit, interval = '5m') # 'BTCUSDT'
@@ -193,11 +196,113 @@ for(pair in BUSDpairs){
 }
 allOrders[, realRate := rate*(1 - fee) - 2*fee]
 allOrders[, yield := 1 + realRate]
-allOrders[, cumprod(yield)]
+allOrders[, cumYield := cumprod(yield), keyby = .(symbol)]
+allOrders[, cumYield]
+allOrders
+
+allData %>% View
+
+# ¿Cómo escoger a los symbols que se ajustan mejor a la estrategia?
+
+# number of orders
+allOrders[as.Date(order_closeTime) <= date, .(numOrders = .N), keyby = .(symbol)] -> numOrders
+numOrders %>% View
+# Analysis Time
+allOrders[as.Date(order_closeTime) <= date, 
+          .(time = difftime(max(order_closeTime), min(order_openTime), units = "days")), 
+          keyby = .(symbol)
+          ][order(-time)]
+# summary of number of candles
+allOrders[as.Date(order_closeTime) <= date, 
+          .(symbol, order_closeTime, order_openTime, candels = as.numeric(difftime(order_closeTime, order_openTime, units = "hours"))/4)
+          ][, .(minNumCandels = min(candels), 
+                fQNumCandels = quantile(candels, 0.25), 
+                medianNumCandels = quantile(candels, 0.5), 
+                meanNumCandels = mean(candels), 
+                tQNumCandels = quantile(candels, 0.75), 
+                maxNumCandels = max(candels)), 
+            keyby = .(symbol)] -> summaryNumCandels
+summaryNumCandels %>% View
+# Best number of candles for greater rate
+allOrders[as.Date(order_closeTime) <= date, 
+          .(symbol, order_closeTime, order_openTime, 
+            candels = as.numeric(difftime(order_closeTime, order_openTime, units = "hours"))/4,
+            yield)
+          ][order(symbol, candels, yield)] -> rateCandles
+p <- ggplot(rateCandles, aes(x = candels, y = yield, color = symbol)) +
+  geom_point() +
+  stat_summary(fun.data= mean_cl_normal) + 
+  geom_smooth(method='lm')
+p %>% ggplotly()
+# win rate
+merge(allOrders[as.Date(order_closeTime) <= date & realRate >= 0, .(wins = .N), keyby = .(symbol)],
+      allOrders[as.Date(order_closeTime) <= date, .(numOrders = .N), keyby = .(symbol)],
+      by = c("symbol"),
+      all = TRUE
+      )[, .(symbol, wins, numOrders, winRate = wins / numOrders)] -> winRate
+winRate[order(-winRate)] %>% View
+# Yields: summary by symbol
+allOrders[as.Date(order_closeTime) <= date, 
+          .(minYields = min(realRate), 
+            fQYields = quantile(realRate, 0.25), 
+            medianYields = quantile(realRate, 0.5), 
+            meanYields = mean(realRate), 
+            tQYields = quantile(realRate, 0.75), 
+            maxYields = max(realRate)), 
+          keyby = .(symbol)] -> summaryYields
+summaryYields %>% View
+# Yields: cumprod
+allOrders[as.Date(order_closeTime) <= date, .(order_openTime, yield = cumprod(1 + realRate)), keyby = .(symbol)] #%>% View
+allOrders[as.Date(order_closeTime) <= date, .(order_openTime, yield = cumprod(1 + realRate)), keyby = .(symbol)
+          ][order(order_openTime)
+            ][, .SD[.N], keyby = .(symbol)][, .(symbol, yield)] -> cumprodYields
+cumprodYields[order(-yield)] %>% View
+# Yield per day
+merge(allOrders[as.Date(order_closeTime) <= date, 
+                .(order_openTime, yield = cumprod(1 + realRate)), 
+                keyby = .(symbol)][order(order_openTime)][, .SD[.N], keyby = .(symbol)],
+      allOrders[as.Date(order_closeTime) <= date, 
+                .(time = difftime(max(order_closeTime), min(order_openTime), units = "days")), 
+                keyby = .(symbol)],
+      by = c("symbol"),
+      all = TRUE
+)[, .(symbol, yield, time, yieldPerDay = (yield - 1)/as.numeric(time))] -> dayYield
+dayYield %>% View
 
 
-allData[as.Date(open_time) <= date] %>% View
-allOrders[as.Date(order_closeTime) <= date] %>% View
+# ¿De qué depende que sea un buen symbol?
+# Parece que entre más larga e inclinada sea la recta, mejor yield final hay.
+# Entonces el tiempo que dura la tendencia está correlacionado fuertemente positivo con el rendimiento.
+
+
+
+
+# winRate, rendimientos, 
+merge(winRate,
+      merge(summaryYields,
+            merge(dayYield,
+                  summaryNumCandels,
+                  by = "symbol",
+                  all = TRUE
+            ),
+            by = "symbol",
+            all = TRUE
+      ),
+      by = "symbol",
+      all = TRUE
+) -> summaryAll
+summaryAll %>% View
+
+summaryAll_all <- summaryAll
+summaryAll_all <- merge(summaryAll_all, 
+                        summaryAll[, .(symbol, wins, numOrders, winRate, 
+                                       minYields, fQYields, medianYields, meanYields, tQYields, maxYields,
+                                       yield, time, yieldPerDay)],
+                        by = c("symbol"),
+                        all = TRUE
+)
+
+# ¿Cómo se correlaciona el winRate, medianYields, meanYields, yield?
 
 
 #### Plots ####
