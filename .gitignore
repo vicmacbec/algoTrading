@@ -2,8 +2,12 @@
 .Rhistory
 .RData
 .Ruserdata
-DataOut
-!DataOut/MASlope_ATRStopLoss/Images/candlesYieldLm.html
+DataOut/*
+!/DataOut/MASlope_ATRStopLoss/
+DataOut/MASlope_ATRStopLoss/*
+!/DataOut/MASlope_ATRStopLoss/Images/
+DataOut/MASlope_ATRStopLoss/Images/*
+!/DataOut/MASlope_ATRStopLoss/Images/candlesYieldLm.html
 .~lock*
 gitToken.txt
 binanceKeys.txt
