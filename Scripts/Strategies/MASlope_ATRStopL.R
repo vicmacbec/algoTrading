@@ -55,7 +55,9 @@ days <- 365
 fee <- 0.00075
 
 BUSDpairs <- c("ETHBUSD", "SANDBUSD", "SOLBUSD", "ADABUSD", "XRPBUSD", "LUNABUSD", "BTCBUSD", 
-               "BNBBUSD", "AVAXBUSD", "DOGEBUSD", "DOTBUSD", "SHIBBUSD", "ENJBUSD", "AXSBUSD", "APEBUSD")
+               "BNBBUSD", "AVAXBUSD", "DOGEBUSD", "DOTBUSD", "SHIBBUSD", "ENJBUSD", "AXSBUSD", "APEBUSD",
+               "LTCBUSD", "LINKBUSD", "ETCBUSD", "TRXBUSD", "EOSBUSD", "XLMBUSD"
+               )
 
 for(pair in BUSDpairs){
   # pair <- "ENJBUSD""AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
@@ -202,6 +204,9 @@ allOrders
 
 allData %>% View
 
+# fwrite(allOrders, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Orders/allOrders_year_20220421.csv")
+# fwrite(allData, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Trades/allData_year_4h_20220421.csv")
+
 # ¿Cómo escoger a los symbols que se ajustan mejor a la estrategia?
 
 # number of orders
@@ -234,6 +239,29 @@ p <- ggplot(rateCandles, aes(x = candels, y = yield, color = symbol)) +
   stat_summary(fun.data= mean_cl_normal) + 
   geom_smooth(method='lm')
 p %>% ggplotly()
+
+# p <- ggplot(rateCandles, aes(x = candels, y = yield, text = paste0("symbol: ", symbol))) +
+#   geom_point() +
+#   stat_summary(fun.data= mean_cl_normal) + 
+#   geom_smooth(method='lm')
+# p %>% ggplotly()
+
+p <- ggplot(rateCandles, aes(x = candels, y = yield)) +
+  geom_point() +
+  stat_summary(fun.data= mean_cl_normal) + 
+  geom_smooth(method='lm')
+p %>% ggplotly()
+
+model <- lm(yield ~ poly(candels, 1), data = rateCandles)
+summary(model)
+
+# Cada 2.12 (0.01/0.004707) velas que dura la estrategia aumenta un 0.01 % el rendimiento, 
+# empezando desde 0.9372 %. 
+# Entonces, en promedio, después de la vela 14 ((1-0.9372)*2.12/0.01), ya se es rentable
+
+
+# USDCBUSD, IDEXBUSD, ALPACABUSD
+
 # win rate
 merge(allOrders[as.Date(order_closeTime) <= date & realRate >= 0, .(wins = .N), keyby = .(symbol)],
       allOrders[as.Date(order_closeTime) <= date, .(numOrders = .N), keyby = .(symbol)],
@@ -257,6 +285,26 @@ allOrders[as.Date(order_closeTime) <= date, .(order_openTime, yield = cumprod(1 
           ][order(order_openTime)
             ][, .SD[.N], keyby = .(symbol)][, .(symbol, yield)] -> cumprodYields
 cumprodYields[order(-yield)] %>% View
+
+p <- ggplot(rateCandles[symbol %in% cumprodYields[yield > 1.11, symbol]], 
+            aes(x = candels, y = yield, color = symbol)) +
+  geom_point() +
+  stat_summary(fun.data= mean_cl_normal) + 
+  geom_smooth(method='lm')
+p %>% ggplotly()
+
+p <- ggplot(rateCandles[symbol %in% cumprodYields[yield > 1.11, symbol]], 
+            aes(x = candels, y = yield)) +
+  geom_point() +
+  stat_summary(fun.data= mean_cl_normal) + 
+  geom_smooth(method='lm')
+p %>% ggplotly()
+
+model <- lm(yield ~ poly(candels, 1), 
+            data = rateCandles[symbol %in% cumprodYields[yield > 1.11, symbol]])
+summary(model)
+
+
 # Yield per day
 merge(allOrders[as.Date(order_closeTime) <= date, 
                 .(order_openTime, yield = cumprod(1 + realRate)), 
@@ -266,15 +314,38 @@ merge(allOrders[as.Date(order_closeTime) <= date,
                 keyby = .(symbol)],
       by = c("symbol"),
       all = TRUE
-)[, .(symbol, yield, time, yieldPerDay = (yield - 1)/as.numeric(time))] -> dayYield
+      )[, .(symbol, yield, time, yieldPerDay = (yield - 1)/as.numeric(time))] -> dayYield
 dayYield %>% View
 
 
 # ¿De qué depende que sea un buen symbol?
 # Parece que entre más larga e inclinada sea la recta, mejor yield final hay.
 # Entonces el tiempo que dura la tendencia está correlacionado fuertemente positivo con el rendimiento.
+# ¿Quién es el más probable en tener una tendencia alcista larga?
+# ¿Quién es el más probable en ser el próximo outlier?
 
 
+daysList <- NULL
+for(order in 1:nrow(allOrders)){
+  tmp <- allOrders[order, .(symbol, 
+                            dates = seq(as.Date(order_openTime), as.Date(order_closeTime), by = "days"), 
+                            yield)]
+  daysList <- rbind(daysList, tmp)
+}
+daysList
+
+tmp <- dcast(daysList, symbol ~ dates, fun.aggregate = mean, value.var = "yield")
+daysList <- melt(tmp, measure.vars = patterns("^202"), variable.name = "dates", value.name = "yield")
+
+daysList[, symbol := factor(symbol, levels = cumprodYields[order(-yield)][, symbol])]
+daysList %>% str
+
+
+p <- ggplot(daysList[yield < 3], aes(dates, symbol, fill= yield)) + 
+  geom_tile() + 
+  scale_fill_gradient(low="cornflowerblue", high="black") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+p %>% ggplotly()
 
 
 # winRate, rendimientos, 
@@ -291,7 +362,7 @@ merge(winRate,
       by = "symbol",
       all = TRUE
 ) -> summaryAll
-summaryAll %>% View
+summaryAll[order(-yield)] %>% View
 
 summaryAll_all <- summaryAll
 summaryAll_all <- merge(summaryAll_all, 
