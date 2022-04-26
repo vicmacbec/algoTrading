@@ -21,6 +21,7 @@ library(plotly)
 library(purrr)
 library(roll)
 library(patchwork)
+library(lubridate)
 
 
 #### Functions ####
@@ -54,10 +55,10 @@ limit <- 1000
 days <- 365
 fee <- 0.00075
 
-BUSDpairs <- c("ETHBUSD", "SANDBUSD", "SOLBUSD", "ADABUSD", "XRPBUSD", "LUNABUSD", "BTCBUSD", 
-               "BNBBUSD", "AVAXBUSD", "DOGEBUSD", "DOTBUSD", "SHIBBUSD", "ENJBUSD", "AXSBUSD", "APEBUSD",
-               "LTCBUSD", "LINKBUSD", "ETCBUSD", "TRXBUSD", "EOSBUSD", "XLMBUSD"
-               )
+# BUSDpairs <- c("ETHBUSD", "SANDBUSD", "SOLBUSD", "ADABUSD", "XRPBUSD", "LUNABUSD", "BTCBUSD", 
+#                "BNBBUSD", "AVAXBUSD", "DOGEBUSD", "DOTBUSD", "SHIBBUSD", "ENJBUSD", "AXSBUSD", "APEBUSD",
+#                "LTCBUSD", "LINKBUSD", "ETCBUSD", "TRXBUSD", "EOSBUSD", "XLMBUSD"
+#                )
 
 for(pair in BUSDpairs){
   # pair <- "ENJBUSD""AXSBUSD""BNBBUSD""BTCBUSD" # "AXSBUSD" # "SANDBUSD"# "SOLBUSD"# "ADABNB"#"XRPBUSD"
@@ -285,6 +286,7 @@ allOrders[as.Date(order_closeTime) <= date, .(order_openTime, yield = cumprod(1 
           ][order(order_openTime)
             ][, .SD[.N], keyby = .(symbol)][, .(symbol, yield)] -> cumprodYields
 cumprodYields[order(-yield)] %>% View
+cumprodYields[, mean(yield, na.rm = TRUE)] # Avg yield for all symbols
 
 p <- ggplot(rateCandles[symbol %in% cumprodYields[yield > 1.11, symbol]], 
             aes(x = candels, y = yield, color = symbol)) +
@@ -340,8 +342,9 @@ daysList <- melt(tmp, measure.vars = patterns("^202"), variable.name = "dates", 
 daysList[, symbol := factor(symbol, levels = cumprodYields[order(-yield)][, symbol])]
 daysList %>% str
 
-
-p <- ggplot(daysList[yield < 3], aes(dates, symbol, fill= yield)) + 
+ceilYield <- 2
+p <- ggplot(daysList[, .(symbol, dates, yield = ifelse(yield > ceilYield, ceilYield, yield))], 
+            aes(dates, symbol, fill= yield)) + 
   geom_tile() + 
   scale_fill_gradient(low="cornflowerblue", high="black") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
@@ -364,6 +367,18 @@ merge(winRate,
 ) -> summaryAll
 summaryAll[order(-yield)] %>% View
 
+summaryAll[, paysOff := ifelse(yield >= 1.11, 1, 0)]
+summaryAll[, .(avgFinalYield = mean(yield),
+               avgYield = mean(meanYields),
+               avgCandles = mean(meanNumCandels),
+               avgFinalYieldPaysOff = mean(ifelse(paysOff == 1, yield, NA), na.rm = TRUE),
+               avgYieldPaysOff = mean(ifelse(paysOff == 1, meanYields, NA), na.rm = TRUE),
+               avgCandlesPaysOff = mean(ifelse(paysOff == 1, meanNumCandels, NA), na.rm = TRUE),
+               avgFinalYieldNoPaysOff = mean(ifelse(paysOff == 0, yield, NA), na.rm = TRUE),
+               avgYieldNoPaysOff = mean(ifelse(paysOff == 0, meanYields, NA), na.rm = TRUE),
+               avgCandlesNoPaysOff = mean(ifelse(paysOff == 0, meanNumCandels, NA), na.rm = TRUE)
+               )]
+
 summaryAll_all <- summaryAll
 summaryAll_all <- merge(summaryAll_all, 
                         summaryAll[, .(symbol, wins, numOrders, winRate, 
@@ -376,8 +391,97 @@ summaryAll_all <- merge(summaryAll_all,
 # ¿Cómo se correlaciona el winRate, medianYields, meanYields, yield?
 
 
+
+
 #### Plots ####
 print("#### Plots ####")
+
+
+#### Plotly ####
+
+# Candle color #
+allData[, direction := ifelse(close >= open, 'Increasing', 'Decreasing')]
+allData[, directionMaSlope := ifelse(maSlope > 3, 'Increasing', ifelse(maSlope < -3, 'Decreasing', 'Range'))]
+allData
+
+
+# Candles #
+
+# i <- list(line = list(color = '#17BECF'))
+# d <- list(line = list(color = '#7F7F7F'))
+i <- list(line = list(color = 'green'))
+d <- list(line = list(color = 'red'))
+
+# plot candlestick chart
+# rm(fig)
+fig <- allData[symbol == "FXSBUSD"] %>% 
+  plot_ly(x = ~open_time, type="candlestick",
+          open = ~open, close = ~close,
+          high = ~high, low = ~low, name = ~symbol,
+          increasing = i, decreasing = d) 
+fig <- fig %>% add_trace(x = ~open_time, y = ~longStopLoss, name = 'Short Stop Loss', 
+                         type = 'scatter', mode = 'markers',
+                         legendgroup = "SSL Channel",
+                         hoverinfo = "none", inherit = F)
+
+# # https://plotly.com/r/horizontal-vertical-shapes/#horizontal-and-vertical-lines-and-rectangles-in-r
+# vline <- function(x = 0, color = "black") {
+#   list(
+#     type = "line",
+#     x0 = x, x1 = x,
+#     yref = "paper",
+#     y0 = 0, y1 = 1,
+#     line = list(color = color)
+#   )
+# }
+# 
+# fig <- fig %>% layout(yaxis = list(title = "Price"),
+#                       shapes = list(vline(allOrders[symbol == "FXSBUSD", order_openTime], 
+#                                           ifelse(allOrders[symbol == "FXSBUSD", yield] > 1,
+#                                                  "green", "red"))))
+fig <- fig %>% layout(yaxis = list(title = "Price"))
+
+# plot volume bar chart
+fig2 <- allData[symbol == "FXSBUSD"]
+fig2 <- fig2 %>% plot_ly(x=~open_time, y=~maSlope, type='scatter', name = paste0("FXSBUSD", " MA Slope"),
+                         color = ~directionMaSlope, colors = c('red', 'green', 'black')) # c('#7F7F7F', '#17BECF') 
+fig2 <- fig2 %>% layout(yaxis = list(title = "MA Slope"))
+
+# create rangeselector buttons
+rs <- list(visible = TRUE, x = 0.5, y = -0.055,
+           xanchor = 'center', yref = 'paper',
+           font = list(size = 9),
+           buttons = list(
+             list(count=1,
+                  label='RESET',
+                  step='all'),
+             list(count=1,
+                  label='1 YR',
+                  step='year',
+                  stepmode='backward'),
+             list(count=3,
+                  label='3 MO',
+                  step='month',
+                  stepmode='backward'),
+             list(count=1,
+                  label='1 MO',
+                  step='month',
+                  stepmode='backward')
+           ))
+
+# subplot with shared x axis
+fig <- subplot(fig, fig2, heights = c(0.7,0.2), nrows=2,
+               shareX = TRUE, titleY = TRUE)
+fig <- fig %>% layout(title = paste0("FXSBUSD", ": ", date-days," - ", date),
+                      xaxis = list(rangeselector = rs),
+                      legend = list(orientation = 'h', x = 0.5, y = 1,
+                                    xanchor = 'center', yref = 'paper',
+                                    font = list(size = 10),
+                                    bgcolor = 'transparent'))
+
+fig %>% layout(plot_bgcolor = "#bababa", # change color of plots
+               paper_bgcolor = "#bababa", # change color of layout behind plots
+               yaxis = list(fixedrange = FALSE)) # Allow y axis zoom
 
 
 #### Saving data ####
