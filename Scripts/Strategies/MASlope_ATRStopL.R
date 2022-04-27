@@ -72,7 +72,7 @@ for(pair in BUSDpairs){
     klines <- rbind(klines, tmp)
   }
   klines <- klines[order(open_time)] %>% unique()
-  klines[, ':='(open_time = open_time + 1*60*60, close_time = close_time + 1*60*60)] # Add 7 hours to match with TrendingView
+  klines[, ':='(open_time = open_time + 5*60*60, close_time = close_time + 5*60*60)] # Add 7 hours to match with TrendingView
   klines
   
   
