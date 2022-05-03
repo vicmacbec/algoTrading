@@ -12,3 +12,4 @@ DataOut/MASlope_ATRStopLoss/Images/*
 gitToken.txt
 binanceKeys.txt
 Scripts/keys.R
+config.yml
