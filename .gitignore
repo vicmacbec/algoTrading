@@ -8,6 +8,8 @@ DataOut/MASlope_ATRStopLoss/*
 !/DataOut/MASlope_ATRStopLoss/Images/
 DataOut/MASlope_ATRStopLoss/Images/*
 !/DataOut/MASlope_ATRStopLoss/Images/candlesYieldLm.html
+!/DataOut/MASlope_ATRStopLoss/Orders/
+!/DataOut/MASlope_ATRStopLoss/Trades/
 .~lock*
 gitToken.txt
 binanceKeys.txt
