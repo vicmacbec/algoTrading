@@ -473,6 +473,7 @@ realYield <- ((finalCapital-feeSell) - initialCapital)/initialCapital
 yield2 - realYield
 
 # Despejando realYield. realYield doesn't depend of capital, just price
+((finalCapital-feeSell) - initialCapital)/initialCapital
 ((btc-feeBuy)*price_f - 0.00075*btc*price_f - initialCapital)/initialCapital
 ((initialCapital/price_s - 0.00075*btc)*price_f - 0.00075*btc*price_f - initialCapital)/initialCapital
 ((initialCapital/price_s - 0.00075*initialCapital/price_s)*price_f - 0.00075*(initialCapital/price_s)*price_f - initialCapital)/initialCapital
