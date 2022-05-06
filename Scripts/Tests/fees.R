@@ -81,4 +81,4 @@ rates*fee + 2*fee
 # ¿Si pierdes más de 200 %, te pagan?
 plot(x = rates, y = (rates + 2)*fee)
 
-
+# A qué tasa los fees aumentan? Usar EDOs?
