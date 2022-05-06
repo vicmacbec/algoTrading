@@ -1,0 +1,44 @@
+#### Configuring the security group ####
+# https://aws.amazon.com/blogs/big-data/running-r-on-aws/
+# https://pdelteil.medium.com/instalar-rstudio-server-en-ec2-aws-amazon-fedb2207876f
+
+
+#### operating system ####
+# https://linuxize.com/post/how-to-check-your-ubuntu-version/
+hostnamectl
+
+
+#### Install R ####
+# https://stackoverflow.com/questions/59415973/how-to-install-newer-version-of-r-on-amazon-linux-2
+sudo amazon-linux-extras install R4
+
+
+#### Install RStudio ####
+# https://gist.github.com/Dulani/0279f33148bde7247a05
+# https://www.rstudio.com/products/rstudio/download-server/redhat-centos/
+sudo yum update
+wget https://download2.rstudio.org/server/centos7/x86_64/rstudio-server-rhel-2022.02.2-485-x86_64.rpm
+sudo yum install rstudio-server-rhel-2022.02.2-485-x86_64.rpm
+
+rstudio-server version
+rstudio-server status
+
+
+#### Create new group and user in Amazon Linux 2 and RStudio-server ####
+sudo useradd <username>
+sudo passwd <username>
+
+vicmacbec
+RSamazon2022
+
+http://ec2-3-138-102-195.us-east-2.compute.amazonaws.com:8787/
+
+
+#### Change user ####
+groups
+less /etc/passwd
+su -l vicmacbec
+
+
+#### Install git ####
+sudo yum install git
