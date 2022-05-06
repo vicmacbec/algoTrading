@@ -15,6 +15,7 @@ library(plotly)
 library(purrr)
 library(roll)
 library(patchwork)
+library(config)
 
 
 #### Initial data ####
@@ -41,7 +42,10 @@ klines <- historicBUSDpairs
 #### Binancer Functions ####
 
 # Credentials
-binance_credentials(key = key_get("Binance_key"), secret = key_get("Binance_secret"))
+# binance_credentials(key = key_get("Binance_key"), secret = key_get("Binance_secret"))
+kp <- config::get(value = "Binance")
+binance_credentials(key = kp$key, secret = kp$secret)
+
 
 # Information about account
 binance_ping()
