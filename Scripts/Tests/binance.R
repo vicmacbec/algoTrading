@@ -54,12 +54,16 @@ binance_mytrades(c("SOLBUSD", "XRPBUSD", "ENJBUSD"))
 
 # Orders
 binance_new_order(symbol = "ENJBUSD", side = "BUY", type = "LIMIT", 
-                  quantity = 10, price = 1.20,
                   time_in_force = "GTC", # Good til cancelled
-                  test = FALSE) 
+                  quantity = 10, price = 1.20, 
+                  test = TRUE) 
+binance_new_order(symbol = "ENJBUSD", side = "BUY", type = "STOP_LOSS_LIMIT", 
+                  time_in_force = "GTC", # Good til cancelled
+                  quantity = 10, price = 1.20, stop_price = 1.01,
+                  test = TRUE) 
 binance_open_orders("ENJBUSD")
-binance_query_order("ENJBUSD", order_id = 238191114) # Only works with real order_id
-binance_cancel_order("ENJBUSD", order_id = 238191114)
+binance_query_order("ENJBUSD", order_id = 247813338) # Only works with real order_id
+binance_cancel_order("ENJBUSD", order_id = 247813338)
 
 
 # Criptos information
@@ -74,15 +78,19 @@ binance_ticker_all_prices()
 # Binance information
 binance_exchange_info()
 binance_time()
+binance_filters("BTCBUSD") -> tmp
+tmp
 
 
-# Don't work
-binance_avg_price("SOLBUSD")
-binance_filters("ENJBUSD")
-binance_trades("SOLBUSD")
-binance_ticker_24hr("SOLBUSD")
-binance_ticker_all_books()
-binance_ticker_book("SOLBUSD")
-binance_ticker_price("SOLBUSD")
-binance_trades("ENJBUSD")
-
+binance_avg_price("SOLBUSD") -> tmp
+tmp
+binance_trades("FXSBUSD") -> tmp
+tmp
+binance_ticker_24hr("SOLBUSD") -> tmp
+tmp
+binance_ticker_all_books() -> tmp
+tmp
+binance_ticker_book("SOLBUSD") -> tmp
+tmp
+binance_ticker_price("SOLBUSD") -> tmp
+tmp
