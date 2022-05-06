@@ -6,24 +6,27 @@
 #
 # Productive
 #
-# Time:
+# Time: ~8 seconds
+#
+# Example:
+# Rscript ~/Drive/Codigos/AlgoTrading/Scripts/Strategies/MASlope_ATRStopL_Prod.R $symbol >> ~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/allLogs/$(date '+%Y_%m_%d_%H:%M:%S')_$symbol.log
 
 
 #### Load libraries ####
 print("#### Load libraries ####")
-library(binancer)
-library(keyring)
-# library(ggplot2)
-# library(scales)
-library(data.table)
-library(TTR)
-library(stringr)
-# library(zoo)
-library(plotly)
-# library(purrr)
-library(roll)
-library(patchwork)
-library(lubridate)
+suppressMessages(library(binancer))
+suppressMessages(library(keyring))
+# suppressMessages(library(ggplot2))
+# suppressMessages(library(scales))
+suppressMessages(library(data.table))
+suppressMessages(library(TTR))
+suppressMessages(library(stringr))
+# suppressMessages(library(zoo))
+suppressMessages(library(plotly))
+# suppressMessages(library(purrr))
+suppressMessages(library(roll))
+suppressMessages(library(patchwork))
+suppressMessages(library(lubridate))
 
 
 #### Functions ####
@@ -34,6 +37,11 @@ print("#### Functions ####")
 pathDataInAllOrders <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Orders/"
 pathDataInAllData <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Trades/"
 # pathDataOut
+
+
+#### Credentials ####
+kp <- config::get(value = "Binance")
+binance_credentials(key = kp$key, secret = kp$secret)
 
 
 #### Load data ####
@@ -98,7 +106,7 @@ print("")
 print("#### Strategy ####")
 
 #### Moving Average Slope ####
-klines[, ohlc4 := (open + high + low + close)/4]
+klines[, ohlc4 := rowSums(.SD)/4, .SDcols = c("open", "high", "low", "close")] %>% suppressWarnings()
 
 # EMA of ohlc4
 klines[, ema := EMA(ohlc4, 55)]
