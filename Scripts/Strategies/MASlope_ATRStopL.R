@@ -10,7 +10,7 @@
 #### Load libraries ####
 print("#### Load libraries ####")
 library(binancer)
-library(keyring)
+# library(keyring)
 library(ggplot2)
 library(scales)
 library(data.table)
@@ -19,7 +19,7 @@ library(stringr)
 library(zoo)
 library(plotly)
 library(purrr)
-library(roll)
+# library(roll)
 library(patchwork)
 library(lubridate)
 
@@ -237,8 +237,8 @@ allOrders[as.Date(order_closeTime) <= date,
           ][order(symbol, candels, yield)] -> rateCandles
 p <- ggplot(rateCandles, aes(x = candels, y = yield, color = symbol)) +
   geom_point() +
-  stat_summary(fun.data= mean_cl_normal) + 
-  geom_smooth(method='lm')
+  # stat_summary(fun.data = mean_cl_normal) + 
+  geom_smooth(method ='lm')
 p %>% ggplotly()
 
 # p <- ggplot(rateCandles, aes(x = candels, y = yield, text = paste0("symbol: ", symbol))) +

@@ -15,7 +15,7 @@
 #### Load libraries ####
 print("#### Load libraries ####")
 suppressMessages(library(binancer))
-suppressMessages(library(keyring))
+# suppressMessages(library(keyring))
 # suppressMessages(library(ggplot2))
 # suppressMessages(library(scales))
 suppressMessages(library(data.table))
@@ -24,7 +24,7 @@ suppressMessages(library(stringr))
 # suppressMessages(library(zoo))
 suppressMessages(library(plotly))
 # suppressMessages(library(purrr))
-suppressMessages(library(roll))
+# suppressMessages(library(roll))
 suppressMessages(library(patchwork))
 suppressMessages(library(lubridate))
 
@@ -34,8 +34,10 @@ print("#### Functions ####")
 
 
 #### Paths ####
-pathDataInAllOrders <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Orders/"
-pathDataInAllData <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Trades/"
+# pathDataInAllOrders <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Orders/"
+# pathDataInAllData <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Trades/"
+pathDataInAllOrders <- "~/algoTrading/DataOut/MASlope_ATRStopLoss/Orders/"
+pathDataInAllData <- "~/algoTrading/DataOut/MASlope_ATRStopLoss/Trades/"
 # pathDataOut
 
 
@@ -89,9 +91,9 @@ difftime(floor_date(Sys.time() + 4 * 3600, unit = "hour"), Sys.time(), units = "
 # klines <- binance_klines(pair, limit = limit, interval = '5m', start_time = '2021-12-03')
 tmp <- binance_klines(pair, limit = 10, interval = '4h'
                       )[, .(symbol, open_time, open, high, low, close, volume, close_time, trades)]
+# Do not add 5 hours because rbind bind the POSIXct columns in the same zone 
 # tmp[, ':='(open_time = open_time + 5*60*60, close_time = close_time + 5*60*60)] # Add 7 hours to match with TrendingView
 
-# Do not add 5 hours because rbind bind the POSIXct columns in the same zone 
 tmp[.N, open_time]
 klines[.N, open_time]
 rbind(klines, tmp)[.N, open_time]
@@ -186,7 +188,7 @@ for(candle in validCandle:nrow(klines2)){
                     riskRewardRatio = ((klines2[candle, close] - price_0)/price_0) / ((-stopLoss + price_0)/price_0))]
         
         # Revisar si algún orden abierta tocó stop Loss o subir stop Loss
-        orders[active == 1 & klines2[candle, low] < stopLoss]
+        # orders[active == 1 & klines2[candle, low] < stopLoss]
         orders[active == 1 & klines2[candle, low] < stopLoss, 
                ':='(order_closeTime = klines2[candle, close_time],
                     active = 0,
@@ -229,8 +231,8 @@ allData <- rbind(allData[symbol != pair], klines2)
 #### Saving data ####
 print("#### Saving data ####")
 
-fwrite(allOrders, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Orders/allOrders_year_20220421.csv")
-fwrite(allData, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Trades/allData_year_4h_20220421.csv")
+fwrite(allOrders, paste0(pathDataInAllOrders, "allOrders_year_20220421.csv"))
+fwrite(allData, paste0(pathDataInAllData, "allData_year_4h_20220421.csv"))
 
 
 #### End Script ####
