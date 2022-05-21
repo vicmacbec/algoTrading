@@ -10,6 +10,7 @@
 #
 # Example:
 # Rscript ~/Drive/Codigos/AlgoTrading/Scripts/Strategies/MASlope_ATRStopL_Prod.R $symbol >> ~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/allLogs/$(date '+%Y_%m_%d_%H:%M:%S')_$symbol.log
+# Rscript ~/algoTrading/Scripts/Strategies/MASlope_ATRStopL_Prod.R $symbol >> ~/algoTrading/DataOut/MASlope_ATRStopLoss/allLogs/$(date '+%Y_%m_%d_%H:%M:%S')_$symbol.log
 
 
 #### Load libraries ####
@@ -36,13 +37,15 @@ print("#### Functions ####")
 #### Paths ####
 # pathDataInAllOrders <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Orders/"
 # pathDataInAllData <- "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/Trades/"
+# pathDataInYml <- "~/Drive/Codigos/AlgoTrading/"
 pathDataInAllOrders <- "~/algoTrading/DataOut/MASlope_ATRStopLoss/Orders/"
 pathDataInAllData <- "~/algoTrading/DataOut/MASlope_ATRStopLoss/Trades/"
+pathDataInYml <- "~/algoTrading/"
 # pathDataOut
 
 
 #### Credentials ####
-kp <- config::get(value = "Binance")
+kp <- config::get(value = "Binance", file = paste0(pathDataInYml, "config.yml"))
 binance_credentials(key = kp$key, secret = kp$secret)
 
 
@@ -98,7 +101,7 @@ tmp[.N, open_time]
 klines[.N, open_time]
 rbind(klines, tmp)[.N, open_time]
 klines <- rbind(klines, tmp)[order(open_time, -trades)] %>% distinct(open_time, .keep_all = TRUE)
-klines[order(open_time)]
+# klines[order(open_time)]
 
 
 print(paste0("Number of registers from ", pair, " pair: ", klines %>% nrow()))
@@ -126,7 +129,7 @@ klines2 <- klines[, .(symbol, open_time, open, high, low, close, volume, close_t
 #### ATR Stop Loss ####
 klines2[, shortStopLoss := close + atr * multiplier]
 klines2[, longStopLoss := close - atr * multiplier]
-klines2
+# klines2
 
 
 #### Alert flags ####
@@ -218,8 +221,8 @@ allOrders <- rbind(allOrders[symbol != pair][, c("realRate", "yield", "cumYield"
 allOrders[, realRate := rate*(1 - fee) - 2*fee]
 allOrders[, yield := 1 + realRate]
 allOrders[, cumYield := cumprod(yield), keyby = .(symbol)]
-allOrders[symbol == pair, cumYield]
-allOrders[symbol == pair]
+# allOrders[symbol == pair, cumYield]
+# allOrders[symbol == pair]
 
 ## Summary data: All data ##
 klines2[, direction := ifelse(close >= open, 'Increasing', 'Decreasing')]
