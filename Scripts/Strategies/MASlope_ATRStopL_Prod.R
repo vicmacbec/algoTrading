@@ -165,23 +165,52 @@ for(candle in validCandle:nrow(klines2)){
               rate = 0.0,
               riskRewardRatio = 0.0)] -> tmp
     
+    # # Si la última vela es la que abre operación: Compra
+    # if(candle == nrow(klines2)){
+    #   binance_new_order(symbol = pair, side = "BUY", type = "LIMIT", 
+    #                     time_in_force = "GTC", # Good til cancelled
+    #                     quantity = 10, 
+    #                     price = tmp[, price_0], 
+    #                     test = TRUE
+    #                     )
+    #   print(paste0("BUY: ", 10, " ", pair, " at ", tmp[, price_0], " usd."))
+    # }
+    
     orders <- rbind(orders, tmp)
   }else{
     # klines2[candle, maSlope] >= 3
     if(klines2[candle, maSlope] >= 3){
       # Mismo cruce: Revisar si algún orden abierta tocó stop Loss o subir stop Loss
       # orders[active == 1 & klines2[candle, low] < stopLoss]
+      
+      closingOrders <- orders[active == 1 & klines2[candle, low] < stopLoss] %>% nrow()
+      
       orders[active == 1 & klines2[candle, low] < stopLoss, 
              ':='(order_closeTime = klines2[candle, close_time],
                   active = 0,
                   price_f = stopLoss,
                   rate = (stopLoss - price_0)/price_0,
                   riskRewardRatio = 0)]
+      
+      # if(closingOrders > 0){
+      #   # Vende por Stop Loss
+      #   binance_new_order(symbol = pair, side = "SELL", type = "LIMIT",
+      #                     time_in_force = "GTC", # Good til cancelled
+      #                     quantity = 10,
+      #                     price = orders[.N, stopLoss],
+      #                     test = TRUE
+      #                     )
+      #   print(paste0("SELL: ", 10, " ", pair, " at ", orders[.N, stopLoss], " usd."))
+      #   }
+      
     }else{
       # Tendencia bajista o rango: Ver si se cierra orden o si se deja abierta hasta nuevo cruce
       # maSlopeCross
       if(maSlopeCross){ # Cambio a negativo
         # orders[active == 1 & klines2[candle, close] > price_0]
+        
+        closingOrders <- orders[active == 1 & klines2[candle, close] > price_0] %>% nrow()
+        
         # Vende con ganancias
         orders[active == 1 & klines2[candle, close] > price_0,
                ':='(order_closeTime = klines2[candle, close_time],
@@ -190,8 +219,22 @@ for(candle in validCandle:nrow(klines2)){
                     rate = (klines2[candle, close] - price_0)/price_0,
                     riskRewardRatio = ((klines2[candle, close] - price_0)/price_0) / ((-stopLoss + price_0)/price_0))]
         
+        # if(closingOrders > 0){
+        #   # Cierra por ganancias
+        #   binance_new_order(symbol = pair, side = "SELL", type = "LIMIT",
+        #                     time_in_force = "GTC", # Good til cancelled
+        #                     quantity = 10,
+        #                     price = orders[.N, price_f],
+        #                     test = TRUE
+        #                     )
+        #   print(paste0("SELL: ", 10, " ", pair, " at ", orders[.N, price_f], " usd."))
+        # }
+        
         # Revisar si algún orden abierta tocó stop Loss o subir stop Loss
         # orders[active == 1 & klines2[candle, low] < stopLoss]
+        
+        closingOrders <- orders[active == 1 & klines2[candle, close] > price_0] %>% nrow()
+        
         orders[active == 1 & klines2[candle, low] < stopLoss, 
                ':='(order_closeTime = klines2[candle, close_time],
                     active = 0,
@@ -199,10 +242,24 @@ for(candle in validCandle:nrow(klines2)){
                     rate = (stopLoss - price_0)/price_0,
                     riskRewardRatio = 0)]
         
+        # if(closingOrders > 0){
+        #   # Vende por Stop Loss
+        #   binance_new_order(symbol = pair, side = "SELL", type = "LIMIT",
+        #                     time_in_force = "GTC", # Good til cancelled
+        #                     quantity = 10,
+        #                     price = orders[.N, stopLoss],
+        #                     test = TRUE
+        #                     )
+        #   print(paste0("SELL: ", 10, " ", pair, " at ", orders[.N, stopLoss], " usd."))
+        # }
+        
         maSlopeCross <- FALSE
       }else{ # Si ya se había hecho el cambio a negativo
         if(!is.null(orders)){ # Revisa si orders está recien creado o ya tiene información
           # orders[active == 1 & klines2[candle, low] < stopLoss]
+          
+          closingOrders <- orders[active == 1 & klines2[candle, low] < stopLoss] %>% nrow()
+          
           # Revisa stop loss
           orders[active == 1 & klines2[candle, low] < stopLoss, 
                  ':='(order_closeTime = klines2[candle, close_time],
@@ -210,6 +267,17 @@ for(candle in validCandle:nrow(klines2)){
                       price_f = stopLoss,
                       rate = (stopLoss - price_0)/price_0,
                       riskRewardRatio = 0)] 
+          
+          # if(closingOrders > 0){
+          #   # Vende por Stop Loss
+          #   binance_new_order(symbol = pair, side = "SELL", type = "LIMIT",
+          #                     time_in_force = "GTC", # Good til cancelled
+          #                     quantity = 10,
+          #                     price = orders[.N, stopLoss],
+          #                     test = TRUE
+          #                     )
+          #   print(paste0("SELL: ", 10, " ", pair, " at ", orders[.N, stopLoss], " usd."))
+          # }
         }
       }
     }
