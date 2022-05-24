@@ -81,6 +81,8 @@ binance_ticker_all_prices()
 
 # Binance information
 binance_exchange_info()
+binance_exchange_info()$symbols[symbol %in% BUSDpairs] %>% View
+
 binance_time()
 binance_filters("BTCBUSD") -> tmp
 tmp
