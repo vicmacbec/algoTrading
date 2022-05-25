@@ -57,14 +57,20 @@ binance_mytrades(c("SOLBUSD", "XRPBUSD", "ENJBUSD"))
 
 
 # Orders
+minNotional <- binance_filters("ENJBUSD")[filterType == "MIN_NOTIONAL", minNotional]
+price <- 0.682
 binance_new_order(symbol = "ENJBUSD", side = "BUY", type = "LIMIT", 
                   time_in_force = "GTC", # Good til cancelled
-                  quantity = 10, price = 1.20, 
+                  quantity = minNotional/price, price = price, 
                   test = TRUE) 
-binance_new_order(symbol = "ENJBUSD", side = "BUY", type = "STOP_LOSS_LIMIT", 
+binance_new_order(symbol = "ENJBUSD", side = "SELL", type = "LIMIT", 
                   time_in_force = "GTC", # Good til cancelled
-                  quantity = 10, price = 1.20, stop_price = 1.01,
+                  quantity = 10, price = price, 
                   test = TRUE) 
+# binance_new_order(symbol = "ENJBUSD", side = "BUY", type = "STOP_LOSS_LIMIT", 
+#                   time_in_force = "GTC", # Good til cancelled
+#                   quantity = 10, price = 1.20, stop_price = 1.01,
+#                   test = TRUE) 
 binance_open_orders("ENJBUSD")
 binance_query_order("ENJBUSD", order_id = 247813338) # Only works with real order_id
 binance_cancel_order("ENJBUSD", order_id = 247813338)
@@ -84,7 +90,7 @@ binance_exchange_info()
 binance_exchange_info()$symbols[symbol %in% BUSDpairs] %>% View
 
 binance_time()
-binance_filters("BTCBUSD") -> tmp
+binance_filters("ENJBUSD") -> tmp
 tmp
 
 
@@ -100,3 +106,108 @@ binance_ticker_book("SOLBUSD") -> tmp
 tmp
 binance_ticker_price("SOLBUSD") -> tmp
 tmp
+
+
+#### Computing allowed quantity coins to make a valid order ####
+# https://stackoverflow.com/questions/65659346/how-to-place-a-binance-order-through-r
+
+#Fetching the current price of crypto of interest
+curr_price <- binance_ticker_price("ENJBUSD")[, price]
+#Fetch your wallet balances
+avail_busd <- binance_balances()[asset == "BUSD", as.numeric(free)]
+#Calculate possible coin quantity
+buy_quantity <- avail_busd/curr_price
+
+# Get minimum possible coin quantity
+filters <- binance_filters("ENJBUSD")
+price <- curr_price
+minNotional <- binance_filters("ENJBUSD")[filterType == "MIN_NOTIONAL", minNotional]
+buy_quantity <- minNotional/price
+
+# # Price
+# quot <- (price - filters[filterType == 'PRICE_FILTER', minPrice]) / filters[filterType == 'PRICE_FILTER', tickSize]
+# quot
+# stopifnot(abs(quot - round(quot)) < 1e-10)
+
+#Quantity
+quot <- (buy_quantity - filters[filterType == 'LOT_SIZE', minQty]) / filters[filterType == 'LOT_SIZE', stepSize]
+quot
+stopifnot(abs(quot - round(quot)) < 1e-10)
+
+decimalplaces <- function(x) {
+  if (class(x)=="character") {
+    x<-gsub("(.*)(\\.)|([0]*$)","",x)
+    nchar(x)
+  } else if (abs(x - round(x)) > .Machine$double.eps^0.5) {
+    nchar(strsplit(sub('0+$', '', as.character(x)), ".", fixed = TRUE)[[1]][[2]])
+  } else {
+    return(0)
+  }
+}
+
+quantity <- (quot*filters[filterType == 'LOT_SIZE', stepSize]) + filters[filterType == 'LOT_SIZE', minQty]
+#Remember to change quot to 0
+quantity <- (0*filters[filterType == 'LOT_SIZE', stepSize]) + filters[filterType == 'LOT_SIZE', minQty]
+#Since anything * by 0 = 0, our final equation is: 
+quantity <- filters[filterType == 'LOT_SIZE', minQty]
+
+#Sometimes the value will be in scientific notation, so we convert it which creates a character string and 
+# this is why the decimalplaces function accommodates numbers and character strings.  
+t <- format(quantity, scientific = FALSE)
+dec <- decimalplaces(t)
+buy_quantity <- round(buy_quantity, digits = dec)
+
+
+#### Get buy_quantity based on the minimum possible minNotional ####
+# Get data
+symbol <- "BTCBUSD"
+avail_busd <- binance_balances()[asset == "BUSD", as.numeric(free)]
+filters <- binance_filters(symbol)
+price <- binance_ticker_price(symbol)[, price]
+
+# Compare prices (current vs first in queu to sell and current vs first in queu to buy)
+sell <- binance_depth(symbol)[["asks"]][1, price]
+buy <- binance_depth(symbol)[["bids"]][1, price]
+abs(price - sell)/price
+abs(price - buy)/price
+# To ensure the order, make the price the first price in queu:
+# buy match with ask, sell match with bid (it is crossed to ensure the match price)
+# Si se va a comprar, buscar que la diferencia sea menor al 0.1 %
+# entre el precio actual y el valor más próximo de precio de venta
+if(abs(price - sell)/price < 0.001){ 
+  price <- sell
+}
+
+
+# Get minimum buy_quantity
+buy_quantity * price >= filters[filterType == "MIN_NOTIONAL", minNotional]
+buy_quantity >= filters[filterType == "MIN_NOTIONAL", minNotional] / price
+buy_quantity <- filters[filterType == "MIN_NOTIONAL", minNotional] / price
+
+# Get decimals allowed
+quantity <- filters[filterType == 'LOT_SIZE', minQty]
+# t <- format(quantity, scientific = FALSE)
+# dec <- decimalplaces(t)
+# buy_quantity <- round(buy_quantity, digits = dec)
+buy_quantity <- plyr::round_any(buy_quantity, accuracy = quantity, f = ceiling)
+
+# Test it
+buy_quantity * price >= filters[filterType == "MIN_NOTIONAL", minNotional]
+quot <- (buy_quantity - filters[filterType == 'LOT_SIZE', minQty]) / filters[filterType == 'LOT_SIZE', stepSize]
+stopifnot(abs(quot - round(quot)) < 1e-10)
+
+buy_quantity
+price
+
+binance_new_order(symbol = symbol, side = "BUY", type = "LIMIT", 
+                  time_in_force = "GTC", # Good til cancelled
+                  quantity = buy_quantity, price = price, 
+                  test = F
+                  ) 
+binance_new_order(symbol = symbol, side = "SELL", type = "LIMIT", 
+                  time_in_force = "GTC", # Good til cancelled
+                  quantity = buy_quantity, price = price, 
+                  test = TRUE
+                  ) 
+
+
