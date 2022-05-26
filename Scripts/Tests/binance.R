@@ -160,29 +160,35 @@ buy_quantity <- round(buy_quantity, digits = dec)
 
 #### Get buy_quantity based on the minimum possible minNotional ####
 # Get data
-symbol <- "BTCBUSD"
+symbol <- "FXSBUSD"
 avail_busd <- binance_balances()[asset == "BUSD", as.numeric(free)]
 filters <- binance_filters(symbol)
-price <- binance_ticker_price(symbol)[, price]
+(price <- binance_ticker_price(symbol)[, price])
 
 # Compare prices (current vs first in queu to sell and current vs first in queu to buy)
-sell <- binance_depth(symbol)[["asks"]][1, price]
-buy <- binance_depth(symbol)[["bids"]][1, price]
-abs(price - sell)/price
-abs(price - buy)/price
+(sell <- binance_depth(symbol)[["asks"]][1, price])
+(buy <- binance_depth(symbol)[["bids"]][1, price])
+(sell - price)/price
+(price - buy)/price
 # To ensure the order, make the price the first price in queu:
 # buy match with ask, sell match with bid (it is crossed to ensure the match price)
 # Si se va a comprar, buscar que la diferencia sea menor al 0.1 %
 # entre el precio actual y el valor más próximo de precio de venta
-if(abs(price - sell)/price < 0.001){ 
+if((sell - price)/price < 0.001){ 
   price <- sell
 }
 
 
+# To get minimum buy_quantity, consider the price of the stop loss (instead of the current price) 
+# in order the order can be allowed 
+stop_loss <- 6.809
+
+
 # Get minimum buy_quantity
-buy_quantity * price >= filters[filterType == "MIN_NOTIONAL", minNotional]
-buy_quantity >= filters[filterType == "MIN_NOTIONAL", minNotional] / price
-buy_quantity <- filters[filterType == "MIN_NOTIONAL", minNotional] / price
+buy_quantity * stop_loss >= filters[filterType == "MIN_NOTIONAL", minNotional]
+buy_quantity >= filters[filterType == "MIN_NOTIONAL", minNotional] / stop_loss
+(buy_quantity <- filters[filterType == "MIN_NOTIONAL", minNotional] / price)
+(buy_quantity <- filters[filterType == "MIN_NOTIONAL", minNotional] / stop_loss)
 
 # Get decimals allowed
 quantity <- filters[filterType == 'LOT_SIZE', minQty]
@@ -192,22 +198,43 @@ quantity <- filters[filterType == 'LOT_SIZE', minQty]
 buy_quantity <- plyr::round_any(buy_quantity, accuracy = quantity, f = ceiling)
 
 # Test it
-buy_quantity * price >= filters[filterType == "MIN_NOTIONAL", minNotional]
+buy_quantity * stop_loss >= filters[filterType == "MIN_NOTIONAL", minNotional]
 quot <- (buy_quantity - filters[filterType == 'LOT_SIZE', minQty]) / filters[filterType == 'LOT_SIZE', stepSize]
 stopifnot(abs(quot - round(quot)) < 1e-10)
 
 buy_quantity
 price
+stop_loss
 
 binance_new_order(symbol = symbol, side = "BUY", type = "LIMIT", 
                   time_in_force = "GTC", # Good til cancelled
                   quantity = buy_quantity, price = price, 
                   test = F
                   ) 
-binance_new_order(symbol = symbol, side = "SELL", type = "LIMIT", 
+binance_new_order(symbol = symbol, side = "SELL", type = "LIMIT",
                   time_in_force = "GTC", # Good til cancelled
-                  quantity = buy_quantity, price = price, 
-                  test = TRUE
-                  ) 
+                  quantity = buy_quantity, price = price,
+                  test = F
+                  )
+binance_open_orders(symbol)
+binance_query_order(symbol, order_id = 86466952) # Only works with real order_id
+binance_cancel_order(symbol, order_id = 86466952)
 
+
+
+# stop_loss <- 6.809
+binance_new_order(symbol = symbol, side = "SELL", type = "STOP_LOSS_LIMIT", 
+                  time_in_force = "GTC", # Good til cancelled
+                  quantity = buy_quantity, price = stop_loss, 
+                  stop_price = stop_loss,
+                  test = F
+                  ) -> orderSL
+openOrders <- binance_open_orders(symbol)
+openOrders[symbol == symbol & 
+             price == stop_loss & 
+             orig_qty == buy_quantity & 
+             type == "STOP_LOSS_LIMIT" &
+             stop_price == stop_loss]
+binance_query_order(symbol, order_id = 86470026) # Only works with real order_id
+binance_cancel_order(symbol, order_id = 86470026)
 
