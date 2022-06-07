@@ -176,12 +176,14 @@ filters <- binance_filters(symbol)
 # entre el precio actual y el valor más próximo de precio de venta
 if((sell - price)/price < 0.001){ 
   price <- sell
+}else if((price - buy)/price < 0){
+  price <- buy
 }
 
 
 # To get minimum buy_quantity, consider the price of the stop loss (instead of the current price) 
 # in order the order can be allowed 
-stop_loss <- 6.809
+stop_loss <- 5.098
 
 
 # Get minimum buy_quantity
@@ -209,20 +211,20 @@ stop_loss
 binance_new_order(symbol = symbol, side = "BUY", type = "LIMIT", 
                   time_in_force = "GTC", # Good til cancelled
                   quantity = buy_quantity, price = price, 
-                  test = F
+                  test = T
                   ) 
-binance_new_order(symbol = symbol, side = "SELL", type = "LIMIT",
-                  time_in_force = "GTC", # Good til cancelled
-                  quantity = buy_quantity, price = price,
-                  test = F
-                  )
+# binance_new_order(symbol = symbol, side = "SELL", type = "LIMIT",
+#                   time_in_force = "GTC", # Good til cancelled
+#                   quantity = buy_quantity, price = price,
+#                   test = T
+#                   )
 binance_open_orders(symbol)
 binance_query_order(symbol, order_id = 86466952) # Only works with real order_id
 binance_cancel_order(symbol, order_id = 86466952)
 
 
 
-# stop_loss <- 6.809
+# stop_loss <- 5.098
 binance_new_order(symbol = symbol, side = "SELL", type = "STOP_LOSS_LIMIT", 
                   time_in_force = "GTC", # Good til cancelled
                   quantity = buy_quantity, price = stop_loss, 
@@ -237,4 +239,119 @@ openOrders[symbol == symbol &
              stop_price == stop_loss]
 binance_query_order(symbol, order_id = 86470026) # Only works with real order_id
 binance_cancel_order(symbol, order_id = 86470026)
+
+
+#### Get buy_quantity based on the minimum possible minNotional (functions) ####
+
+symbol <- "FXSBUSD"
+filters <- binance_filters(symbol)
+stop_loss <- 5.096
+test <- F
+
+buyTrade <- function(symbol, filters, stop_loss, test=T){
+  # Get data
+  avail_busd <- binance_balances()[asset == "BUSD", as.numeric(free)]
+  price <- binance_ticker_price(symbol)[, price]
+  
+  # Compare prices (current vs first in queu to sell and current vs first in queu to buy)
+  sell <- binance_depth(symbol)[["asks"]][1, price]
+  buy <- binance_depth(symbol)[["bids"]][1, price]
+
+  # To ensure the order, make the price the first price in queu:
+  # buy match with ask, sell match with bid (it is crossed to ensure the match price)
+  # Si se va a comprar, buscar que la diferencia sea menor al 0.1 %
+  # entre el precio actual y el valor más próximo de precio de venta
+  if((sell - price)/price < 0.001){ 
+    price <- sell
+  }else if((price - buy)/price < 0){
+    price <- buy
+  }
+  
+  # To get minimum buy_quantity, consider the price of the stop loss (instead of the current price) 
+  # in order the order can be allowed 
+  # Get minimum buy_quantity
+  buy_quantity <- filters[filterType == "MIN_NOTIONAL", minNotional] / stop_loss
+  
+  # Get decimals allowed
+  quantity <- filters[filterType == 'LOT_SIZE', minQty]
+  buy_quantity <- plyr::round_any(buy_quantity, accuracy = quantity, f = ceiling)
+  
+  
+  # Orders
+  binance_new_order(symbol = symbol, side = "BUY", type = "LIMIT", 
+                    time_in_force = "GTC", # Good til cancelled
+                    quantity = buy_quantity, price = price, 
+                    test = test
+                    ) -> orderBuy
+  
+
+  binance_new_order(symbol = symbol, side = "SELL", type = "STOP_LOSS_LIMIT", 
+                    time_in_force = "GTC", # Good til cancelled
+                    quantity = buy_quantity, price = stop_loss, 
+                    stop_price = stop_loss,
+                    test = test
+                    ) -> orderSL
+
+  # Getting data
+  openOrders <- binance_open_orders(symbol)
+  openOrders[symbol == symbol & 
+               price == stop_loss & 
+               orig_qty == buy_quantity & 
+               type == "STOP_LOSS_LIMIT" &
+               stop_price == stop_loss] -> orderSL2
+
+  results <- list(orderBuy = orderBuy,
+                  orderSL2 = orderSL2,
+                  test = test
+                  )
+  
+  return(results)
+}
+
+trades <- fread("~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
+trades <- NULL
+
+
+tmp <- data.table(tradeId = 1,
+                  symbol = results[["orderBuy"]][, symbol],
+                  date = results[["orderBuy"]][, transact_time],
+                  side = results[["orderBuy"]][, side],
+                  price = results[["orderBuy"]][, price],
+                  quantity = results[["orderBuy"]][, orig_qty],
+                  quote = results[["orderBuy"]][, cummulative_quote_qty],
+                  stopLoss = results[["orderSL2"]][, stop_price],
+                  idOrderBuy = results[["orderBuy"]][, order_id],
+                  idOrderSL = results[["orderSL2"]][, order_id],
+                  sell = 0,
+                  moneyEarned = 0,
+                  active = TRUE,
+                  test = results[["test"]]
+                  )
+print(tmp)
+trades <- rbind(trades,tmp)
+
+fwrite(trades, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
+
+
+# sell
+(currentPrice <- binance_ticker_price(symbol)[, price])
+if(trades[currentPrice > price] %>% nrow() > 0){
+  numberTrades <- trades[currentPrice > price] %>% nrow()
+  for(trade in 1:numberTrades){
+    # Selling order
+    binance_new_order(symbol = trades[currentPrice > price][trade, symbol], 
+                      side = "SELL", type = "LIMIT",
+                      time_in_force = "GTC", # Good til cancelled
+                      quantity = trades[currentPrice > price][trade, quantity], 
+                      price = currentPrice,
+                      test = trades[currentPrice > price][trade, test]
+                      )
+    # Cancelling stop loss
+    binance_cancel_order(trades[currentPrice > price][trade, symbol], 
+                         order_id = trades[currentPrice > price][trade, idOrderSL]
+                         )
+  }
+}
+
+
 
