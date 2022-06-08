@@ -242,13 +242,38 @@ binance_cancel_order(symbol, order_id = 86470026)
 
 
 #### Get buy_quantity based on the minimum possible minNotional (functions) ####
+symbol <- "BTCBUSD"
 
-symbol <- "FXSBUSD"
+trades <- fread("~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
+trades
+# trades <- NULL
+
+# If is the first time for the symbol
+data.table(tradeId = 0,
+           symbol = symbol,
+           date = Sys.time(),
+           side = "BUY",
+           price = 0,
+           quantity = 0,
+           quote = 0,
+           stopLoss = 0,
+           idOrderBuy = 0,
+           idOrderSL = 0,
+           idOrderSell = 0,
+           sell = 0,
+           moneyEarned = 0,
+           yield = 0,
+           active = FALSE,
+           test = TRUE,
+           moneyCurrent = 10) -> trades
+
+
+# Initial data
 filters <- binance_filters(symbol)
-stop_loss <- 5.096
-test <- F
+stop_loss <- 28919
+test <- T
 
-buyTrade <- function(symbol, filters, stop_loss, test=T){
+buyTrade <- function(symbol, filters, stop_loss, test = T){
   # Get data
   avail_busd <- binance_balances()[asset == "BUSD", as.numeric(free)]
   price <- binance_ticker_price(symbol)[, price]
@@ -276,6 +301,10 @@ buyTrade <- function(symbol, filters, stop_loss, test=T){
   quantity <- filters[filterType == 'LOT_SIZE', minQty]
   buy_quantity <- plyr::round_any(buy_quantity, accuracy = quantity, f = ceiling)
   
+  # If there aren't enough founds
+  if(buy_quantity * price > avail_busd){
+    test <- TRUE
+  }
   
   # Orders
   binance_new_order(symbol = symbol, side = "BUY", type = "LIMIT", 
@@ -291,15 +320,29 @@ buyTrade <- function(symbol, filters, stop_loss, test=T){
                     stop_price = stop_loss,
                     test = test
                     ) -> orderSL
-
-  # Getting data
-  openOrders <- binance_open_orders(symbol)
-  openOrders[symbol == symbol & 
-               price == stop_loss & 
-               orig_qty == buy_quantity & 
-               type == "STOP_LOSS_LIMIT" &
-               stop_price == stop_loss] -> orderSL2
-
+  
+  # Test
+  if(test){
+    orderBuy <- data.table(symbol = symbol,
+                           transact_time = Sys.time(),
+                           side = "BUY",
+                           price = price,
+                           orig_qty = buy_quantity,
+                           cummulative_quote_qty = price * buy_quantity,
+                           order_id = 0
+                           )
+    orderSL2 <- data.table(stop_price = stop_loss,
+                           order_id = 0)
+  }else{
+    # Getting stop loss data
+    openOrders <- binance_open_orders(symbol)
+    openOrders[symbol == symbol & 
+                 price == stop_loss & 
+                 orig_qty == buy_quantity & 
+                 type == "STOP_LOSS_LIMIT" &
+                 stop_price == stop_loss] -> orderSL2
+  }
+  
   results <- list(orderBuy = orderBuy,
                   orderSL2 = orderSL2,
                   test = test
@@ -308,11 +351,8 @@ buyTrade <- function(symbol, filters, stop_loss, test=T){
   return(results)
 }
 
-trades <- fread("~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
-trades <- NULL
 
-
-tmp <- data.table(tradeId = 1,
+tmp <- data.table(tradeId = trades[.N, tradeId] + 1,
                   symbol = results[["orderBuy"]][, symbol],
                   date = results[["orderBuy"]][, transact_time],
                   side = results[["orderBuy"]][, side],
@@ -322,36 +362,85 @@ tmp <- data.table(tradeId = 1,
                   stopLoss = results[["orderSL2"]][, stop_price],
                   idOrderBuy = results[["orderBuy"]][, order_id],
                   idOrderSL = results[["orderSL2"]][, order_id],
+                  idOrderSell = 0,
                   sell = 0,
                   moneyEarned = 0,
+                  yield = 0,
                   active = TRUE,
-                  test = results[["test"]]
+                  test = results[["test"]],
+                  moneyCurrent = trades[.N, moneyCurrent]
                   )
 print(tmp)
 trades <- rbind(trades,tmp)
+# trades[, moneyCurrentLag := c(NA, moneyCurrent[-.N])]
 
 fwrite(trades, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
 
 
 # sell
 (currentPrice <- binance_ticker_price(symbol)[, price])
-if(trades[currentPrice > price] %>% nrow() > 0){
-  numberTrades <- trades[currentPrice > price] %>% nrow()
+# currentPrice <- 30290
+sellTrades <- trades[currentPrice > price & active == TRUE]
+if(sellTrades %>% nrow() > 0){
+  numberTrades <- sellTrades %>% nrow()
   for(trade in 1:numberTrades){
+    # Cancelling stop loss if it is not a TEST
+    if(sellTrades[, test] == FALSE){
+      binance_cancel_order(sellTrades[trade, symbol], 
+                           order_id = sellTrades[trade, idOrderSL]
+                           ) 
+    }
+    
     # Selling order
-    binance_new_order(symbol = trades[currentPrice > price][trade, symbol], 
+    binance_new_order(symbol = sellTrades[trade, symbol], 
                       side = "SELL", type = "LIMIT",
                       time_in_force = "GTC", # Good til cancelled
-                      quantity = trades[currentPrice > price][trade, quantity], 
+                      quantity = sellTrades[trade, quantity], 
                       price = currentPrice,
-                      test = trades[currentPrice > price][trade, test]
-                      )
-    # Cancelling stop loss
-    binance_cancel_order(trades[currentPrice > price][trade, symbol], 
-                         order_id = trades[currentPrice > price][trade, idOrderSL]
-                         )
+                      test = sellTrades[trade, test]
+                      ) -> idOrderSell
+    
+    sellTrades[trade, 
+               .(tradeId, symbol, date, side, price, quantity, quote, stopLoss, idOrderBuy, idOrderSL,
+                 idOrderSell = ifelse(test == FALSE, idOrderSell[, order_id], 0),
+                 sell = currentPrice,
+                 moneyEarned = (currentPrice - price) * quantity,
+                 yield = (currentPrice - price)/price,
+                 active = FALSE,
+                 test, 
+                 moneyCurrent = ifelse(test == FALSE, 
+                                       ifelse(moneyCurrent + (currentPrice - price) * quantity > 10,
+                                              moneyCurrent + (currentPrice - price) * quantity,
+                                              10), 
+                                       moneyCurrent)
+                 # moneyCurrentLag
+                 )] -> sellTrades2
+    
+    trades <- rbind(trades[tradeId != sellTrades[trade, tradeId]], 
+                    sellTrades2
+                    )[order(tradeId)]
   }
 }
+# trades[, moneyCurrentLag := c(NA, moneyCurrent[-.N])]
+
+
+# Stop Loss
+trades[currentPrice < stopLoss & active == TRUE, 
+       ":="(sell = stopLoss,
+            moneyEarned = (stopLoss - price) * quantity,
+            yield = (stopLoss - price)/price,
+            active = FALSE,
+            moneyCurrent = ifelse(test == FALSE, 
+                                  ifelse(moneyCurrent + (stopLoss - price) * quantity > 10,
+                                         moneyCurrent + (stopLoss - price) * quantity,
+                                         10), 
+                                  moneyCurrent)
+            )]# -> trades
+
+# trades[, moneyCurrentLag := c(NA, moneyCurrent[-.N])]
 
 
 
+# Solo falta:
+# - agregar comisiones
+# - agregarlo al productivo
