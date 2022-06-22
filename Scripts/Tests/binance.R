@@ -245,6 +245,8 @@ binance_cancel_order(symbol, order_id = 86470026)
 
 
 #### Get buy_quantity based on the minimum possible minNotional (functions) ####
+options(scipen=999)
+
 symbol <- "BTCBUSD"
 
 trades <- fread("~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
@@ -275,7 +277,7 @@ data.table(tradeId = 0,
 
 # Initial data
 filters <- binance_filters(symbol)
-stop_loss <- 29156.91
+stop_loss <- 19483.56
 test <- T
 fee <- 0.00075
 moneyCurrent <- trades[.N, moneyCurrent]
@@ -310,7 +312,7 @@ buyTrade <- function(symbol, filters, stop_loss, moneyCurrent, test = T){
   quantity <- filters[filterType == 'LOT_SIZE', minQty]
   buy_quantity <- plyr::round_any(buy_quantity, accuracy = quantity, f = ceiling)
   
-  quantity <- filters[filterType == 'LOT_SIZE', minQty]
+  # quantity <- filters[filterType == 'LOT_SIZE', minQty]
   buy_quantity_min <- plyr::round_any(buy_quantity_min, accuracy = quantity, f = ceiling)
   
   priceSL <- filters[filterType == 'PRICE_FILTER', minPrice]
@@ -414,7 +416,7 @@ buyTrade <- function(symbol, filters, stop_loss, moneyCurrent, test = T){
   
   return(results)
 }
-results <- buyTrade(symbol, filters, stop_loss, T)
+results <- buyTrade(symbol, filters, stop_loss, moneyCurrent, T)
 
 tmp <- data.table(tradeId = trades[.N, tradeId] + 1,
                   symbol = results[["orderBuy"]][, symbol],
@@ -445,7 +447,7 @@ fwrite(trades, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades
 
 # sell
 (currentPrice <- binance_ticker_price(symbol)[, price])
-# currentPrice <- 30241
+# currentPrice <- 20480
 sellTrades <- trades[currentPrice > price & active == TRUE]
 if(sellTrades %>% nrow() > 0){
   numberTrades <- sellTrades %>% nrow()
@@ -458,14 +460,38 @@ if(sellTrades %>% nrow() > 0){
                            ) 
     }
     
+
     # Selling order
-    binance_new_order(symbol = sellTrades[trade, symbol], 
-                      side = "SELL", type = "LIMIT",
-                      time_in_force = "GTC", # Good til cancelled
-                      quantity = sellTrades[trade, quantity], 
-                      price = currentPrice,
-                      test = sellTrades[trade, test]
-                      ) -> idOrderSell
+    idOrderSell <- NULL
+    attempt <- 1
+    while( is.null(idOrderSell) && attempt <= 3 ) {
+      # If error, check whereas the error is by quantity or price
+      # and increase by the minimum possible
+      quotQuant <- (sellTrades[trade, quantity] - filters[filterType == 'LOT_SIZE', minQty]) / filters[filterType == 'LOT_SIZE', stepSize]
+      quotPrice <- (currentPrice - filters[filterType == 'PRICE_FILTER', minPrice]) / filters[filterType == 'PRICE_FILTER', tickSize]
+      if(attempt != 1){
+        if(abs(quotQuant - round(quotQuant)) > 1e-10){
+          sellTrades[trade]$quantity <- sellTrades[trade, quantity] + filters[filterType == 'LOT_SIZE', minQty]
+        }else if(abs(quotPrice - round(quotPrice)) > 1e-10){
+          currentPrice <- currentPrice + filters[filterType == 'PRICE_FILTER', minPrice]
+        }
+      }
+      
+      try(
+        {binance_new_order(symbol = sellTrades[trade, symbol],
+                           side = "SELL", type = "LIMIT",
+                           time_in_force = "GTC", # Good til cancelled
+                           quantity = sellTrades[trade, quantity],
+                           price = currentPrice,
+                           test = sellTrades[trade, test]
+                           ) -> idOrderSell
+          },
+        silent = TRUE
+      )
+      
+      attempt <- attempt + 1
+    }
+    
     
     sellTrades[trade, 
                .(tradeId, symbol, date, side, price, quantity, quote, stopLoss, idOrderBuy, idOrderSL,
@@ -505,6 +531,7 @@ if(sellTrades %>% nrow() > 0){
 trades
 
 
+# currentPrice <- 19400
 # Stop Loss
 trades[currentPrice < stopLoss & active == TRUE, 
        ":="(sell = stopLoss,
@@ -518,7 +545,7 @@ trades[currentPrice < stopLoss & active == TRUE,
                                          moneyCurrent + ((price * (1 + (((stopLoss - price)/price) * (1 - fee) - 2*fee)) - price) * quantity), # moneyCurrent + realEarn
                                          10), 
                                   moneyCurrent)
-            )]# -> trades
+            )]
 
 # trades[, moneyCurrentLag := c(NA, moneyCurrent[-.N])]
 
