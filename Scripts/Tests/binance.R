@@ -560,9 +560,6 @@ trades[currentPrice < stopLoss & active == TRUE,
 
 
 # Solo falta:
-# - buy using the available money in trades[.N, moneyCurrent]
-# - Si sale error al poner orden, volver a intentarlo sumando filters[filterType == 'PRICE_FILTER', minPrice] a precio
-#   - probar si error es por precio o cantidad. Sumar lo mínimo posible filters[filterType == 'PRICE_FILTER', minPrice]
 # - Hacer pruebas si se puso la orden y se compró o no
 # - agregarlo al productivo
 #   - Preguntar si la fecha de la vela en cuestión es mayor que la fecha de trades que están active == TRUE 
