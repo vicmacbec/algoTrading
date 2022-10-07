@@ -52,8 +52,10 @@ binance_ping()
 binance_account()
 binance_all_orders(c("ENJBUSD")) # SOLBUSD
 binance_balances(usdt = TRUE)[order(-usd)]
+binance_balances(usdt = TRUE)[usd > 0][order(-usd)]
 binance_balances(usdt = TRUE)[, sum(usd, na.rm = TRUE)]
 binance_mytrades(c("SOLBUSD", "XRPBUSD", "ENJBUSD"))
+binance_mytrades(binance_symbols())
 
 
 # Orders
@@ -277,7 +279,7 @@ data.table(tradeId = 0,
 
 # Initial data
 filters <- binance_filters(symbol)
-stop_loss <- 19483.56
+stop_loss <- 19530
 test <- T
 fee <- 0.00075
 moneyCurrent <- trades[.N, moneyCurrent]
@@ -357,10 +359,10 @@ buyTrade <- function(symbol, filters, stop_loss, moneyCurrent, test = T){
   }
   # r; attempt
   
-  # Stop Loss
+  # Stop Loss (if orderBuy could not be registered, neither the stop loss)
   orderSL <- NULL
   attempt <- 1
-  while( is.null(orderSL) && attempt <= 3 ) {
+  while( is.null(orderSL) && attempt <= 3 && !is.null(orderBuy) ) {
     # If error, check whereas the error is by quantity or price
     # and increase by the minimum possible
     quotQuant <- (buy_quantity - filters[filterType == 'LOT_SIZE', minQty]) / filters[filterType == 'LOT_SIZE', stepSize]
@@ -401,12 +403,17 @@ buyTrade <- function(symbol, filters, stop_loss, moneyCurrent, test = T){
                            order_id = 0)
   }else{
     # Getting stop loss data
-    openOrders <- binance_open_orders(symbol)
-    openOrders[symbol == symbol & 
-                 price == stop_loss & 
-                 orig_qty == buy_quantity & 
-                 type == "STOP_LOSS_LIMIT" &
-                 stop_price == stop_loss] -> orderSL2
+    if(!is.null(orderBuy)){ # Buy order could be registered
+      openOrders <- binance_open_orders(symbol)
+      openOrders[symbol == symbol & 
+                   price == stop_loss & 
+                   orig_qty == buy_quantity & 
+                   type == "STOP_LOSS_LIMIT" &
+                   stop_price == stop_loss] -> orderSL2
+    }else{
+      orderSL2 <- NULL
+    }
+    
   }
   
   results <- list(orderBuy = orderBuy,
@@ -418,29 +425,30 @@ buyTrade <- function(symbol, filters, stop_loss, moneyCurrent, test = T){
 }
 results <- buyTrade(symbol, filters, stop_loss, moneyCurrent, T)
 
-tmp <- data.table(tradeId = trades[.N, tradeId] + 1,
-                  symbol = results[["orderBuy"]][, symbol],
-                  date = results[["orderBuy"]][, transact_time],
-                  side = results[["orderBuy"]][, side],
-                  price = results[["orderBuy"]][, price],
-                  quantity = results[["orderBuy"]][, orig_qty],
-                  quote = results[["orderBuy"]][, cummulative_quote_qty],
-                  stopLoss = results[["orderSL2"]][, stop_price],
-                  idOrderBuy = results[["orderBuy"]][, order_id],
-                  idOrderSL = results[["orderSL2"]][, order_id],
-                  idOrderSell = 0,
-                  sell = 0,
-                  moneyEarned = 0,
-                  yield = 0,
-                  realRate = 0,
-                  realEarn = 0,
-                  active = TRUE,
-                  test = results[["test"]],
-                  moneyCurrent = trades[.N, moneyCurrent]
-                  )
-print(tmp)
-trades <- rbind(trades,tmp)
-trades
+if(!is.null(results[["orderSL2"]])){
+  tmp <- data.table(tradeId = trades[.N, tradeId] + 1,
+                    symbol = results[["orderBuy"]][, symbol],
+                    date = results[["orderBuy"]][, transact_time],
+                    side = results[["orderBuy"]][, side],
+                    price = results[["orderBuy"]][, price],
+                    quantity = results[["orderBuy"]][, orig_qty],
+                    quote = results[["orderBuy"]][, cummulative_quote_qty],
+                    stopLoss = results[["orderSL2"]][, stop_price],
+                    idOrderBuy = results[["orderBuy"]][, order_id],
+                    idOrderSL = results[["orderSL2"]][, order_id],
+                    idOrderSell = 0,
+                    sell = 0,
+                    moneyEarned = 0,
+                    yield = 0,
+                    realRate = 0,
+                    realEarn = 0,
+                    active = TRUE,
+                    test = results[["test"]],
+                    moneyCurrent = trades[.N, moneyCurrent])
+  print(tmp)
+  trades <- rbind(trades,tmp)
+  trades
+}
 
 fwrite(trades, "~/Drive/Codigos/AlgoTrading/DataOut/MASlope_ATRStopLoss/myTrades/myTrades.csv")
 
