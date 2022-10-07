@@ -14,3 +14,4 @@ config.yml
 Credentials
 AWS
 *.csv
+*.gdsheet
