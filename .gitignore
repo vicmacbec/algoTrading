@@ -13,3 +13,4 @@ Scripts/keys.R
 config.yml
 Credentials
 AWS
+*.csv
