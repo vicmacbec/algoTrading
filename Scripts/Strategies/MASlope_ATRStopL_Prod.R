@@ -144,6 +144,8 @@ print("#### Testing strategy ####")
 orders <- NULL 
 maSlopeCross <- FALSE
 validCandle <- klines2[, sum(is.na(maSlope))] + 1 # Count the candles until the first no NA value 
+# minActiveDate <- trades[symbol == pair & active == TRUE, min(date)]
+# klines2[open_time >= minActiveDate]
 for(candle in validCandle:nrow(klines2)){
   # for(candle in 898:944){
   # candle <- 898 # 898
