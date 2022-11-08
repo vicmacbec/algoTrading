@@ -8,6 +8,11 @@ DataOut/MASlope_ATRStopLoss/*
 !/DataOut/MASlope_ATRStopLoss/Images/
 DataOut/MASlope_ATRStopLoss/Images/*
 !/DataOut/MASlope_ATRStopLoss/Images/candlesYieldLm.html
+!/DataOut/MLRules/
+DataOut/MLRules/*
+!/DataOut/MLRules/Images/
+DataOut/MLRules/Images/*
+!/DataOut/MLRules/Images/1featureImportance.png
 .~lock*
 Scripts/keys.R
 config.yml
