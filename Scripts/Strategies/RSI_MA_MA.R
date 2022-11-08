@@ -2,10 +2,9 @@
 #
 # Trade strategy #
 #
-#
+# https://www.youtube.com/watch?v=hC9p5xTqGvI
 #
 # Time:
-
 
 #### Load libraries ####
 print("#### Load libraries ####")
