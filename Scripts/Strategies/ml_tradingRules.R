@@ -49,8 +49,8 @@ pathDataInYml <- "~/Drive/Codigos/AlgoTrading/"
 
 
 #### Credentials ####
-kp <- config::get(value = "Binance", file = paste0(pathDataInYml, "config.yml"))
-binance_credentials(key = kp$key, secret = kp$secret)
+# kp <- config::get(value = "Binance", file = paste0(pathDataInYml, "config.yml"))
+# binance_credentials(key = kp$key, secret = kp$secret)
 
 
 #### Load data ####
@@ -90,7 +90,7 @@ print(paste0("Pair: ", pair))
 
 # # Cada 4 horas
 # days <- 2000
-# date <-  as.Date("2022-11-08") # Sys.Date() # Last day
+# date <- Sys.Date() # as.Date("2022-11-08") # Sys.Date() # Last day
 # klines <- NULL
 # for(day in days:0){
 #   tmp <- binance_klines(pair, limit = 24/4, interval = '4h', start_time = date - day)
@@ -100,7 +100,7 @@ print(paste0("Pair: ", pair))
 
 # Diario
 years <- 10
-date <-  as.Date("2022-11-08") # Sys.Date() # Last day
+date <-  Sys.Date() # as.Date("2022-11-08") # Sys.Date() # Last day
 klines <- NULL
 for(year in years:0){
   tmp <- binance_klines(pair, limit = 370, interval = '1d', start_time = date - year * 370
@@ -108,6 +108,25 @@ for(year in years:0){
   klines <- rbind(klines, tmp) %>% unique()
 }
 klines
+
+# Creating the target
+klines[, high7Days := frollapply(high, n = 7, FUN = max, align = "left")]
+klines[, increment := (high7Days - open) / open]
+# The 50 % of the week increments, are high by 5 %
+klines[, .(percentil = seq(0, 1, 0.1),
+           value = increment %>% quantile(probs = seq(0, 1, 0.1), na.rm = TRUE))]
+
+
+# # Week
+# years <- 10
+# date <-  Sys.Date() # as.Date("2022-11-08") # Sys.Date() # Last day
+# klines <- NULL
+# for(year in years:1){
+#   tmp <- binance_klines(pair, limit = 53, interval = '1w', start_time = date - year * 370
+#                         )[, .(symbol, open_time, open, high, low, close, volume, close_time, trades)]
+#   klines <- rbind(klines, tmp) %>% unique()
+# }
+# klines
 
 
 print(paste0("Number of registers from ", pair, " pair: ", klines %>% nrow()))
@@ -138,7 +157,7 @@ klines[, c("tr", "atr", "trueHigh", "trueLow") := ATR(klines[, .(high, low, clos
 
 # MA Slope #
 klines[, maSlope := rad2degree*atan((ema - ema_lag)/atr)]
-klines2 <- klines[, .(symbol, open_time, open, high, low, close, volume, close_time, trades, 
+klines2 <- klines[, .(symbol, open_time, open, high, low, close, volume, close_time, trades, increment, 
                       ohlc4, ema, atr, maSlope)]
 
 # Moving average #
@@ -173,11 +192,14 @@ klines2[, shortStopLoss := close + atr * multiplier]
 klines2[, longStopLoss := close - atr * multiplier]
 
 # Target #
-# Quizás cambiar target 1 si es que es más grande por 10 % de su valor inicial anterior
-# Quizás solo quedarnos con los registros que están en cierta cantidad de precio
-klines2[, close_lead := shift(close, type = "lead")]
-klines2[, target := ifelse(close_lead > (1.02 * close), "1", "0")]
+# # Quizás cambiar target 1 si es que es más grande por 10 % de su valor inicial anterior
+# # Quizás solo quedarnos con los registros que están en cierta cantidad de precio
+# klines2[, close_lead := shift(close, type = "lead")]
+# klines2[, target := ifelse(close_lead > (1.02 * close), "1", "0")]
+# table(klines2[, target])
+klines2[, target := ifelse(increment > 0.05, "1", "0")]
 table(klines2[, target])
+
 
 #### Features relations ####
 klines2[, 
@@ -186,10 +208,13 @@ klines2[,
           ohlc4, ema, atr, maSlope, rollmean05, rollmean10, rollmean20, rollmean51,
           dn, up, pctB, macd, signal, macdChange, RSI, shortStopLoss, longStopLoss, 
           target)
-        ] %>% na.omit() -> klines3
+        ] %>% na.omit() -> klinesTmp1
+
+# klines3 <- rbind(klinesTmp1, klinesTmp2)
+klines3 <- klinesTmp1
 
 
-#### Feauter selection ####
+#### Feature selection ####
 # All features
 features1 <- c("open", "high", "low", "close", "volume", "trades", 
                "ohlc4", "ema", "atr", "maSlope", 
@@ -198,11 +223,22 @@ features1 <- c("open", "high", "low", "close", "volume", "trades",
 # Half most important features
 features2 <- c("open", "volume", "trades", 
                "atr", "maSlope", 
-               # "dn", "up", 
+               "rollmean05", "rollmean20", "ema",
                "pctB", "macd", "signal", "RSI")
+# Best 5 important features
+features3 <- c("open", 
+               "atr", "maSlope", 
+               "signal", "RSI")
 features <- features2
 
 
+# Transforming data getting the increments between each period time
+# klines3[, (features) := lapply(.SD, function(x){ (x - shift(x)) / shift(x)} ),
+#         .SDcols = features]
+# klines3 <- klines3 %>% na.omit()
+
+
+# Plotting feature relations
 ggpairs(klines3, columns = features, 
         aes(color = target, alpha = 0.5)
         # lower = list(continuous = "smooth")
@@ -241,26 +277,60 @@ xgboost_test <- xgb.DMatrix(data = data.matrix(x_test), label = y_test)
 
 # Comparing train and test distributions
 features
-feature <- features[2]
-plot(ecdf(x_train[, ..feature][[1]]), main = feature)
-lines(ecdf(x_test[, ..feature][[1]]), col = 'blue')
+par("mar")
+par(mar=c(1,1,1,1))
+dimPlot <- ceiling(length(features)**(0.5))
+par(mfrow=c(dimPlot, dimPlot))
+for(feature in features){
+  plot(ecdf(x_train[, ..feature][[1]]), main = feature)
+  lines(ecdf(x_test[, ..feature][[1]]), col = 'blue')
+}
+par(mfrow=c(1,1))
 
 
 # Model
 # xgboost::xgb.cv()
 
+xgb.max_specificity <- function(pred, dtrain) {
+  # https://github.com/Laurae2/Laurae/blob/master/R/xgb.max_specificity.R
+  
+  y_true <- getinfo(dtrain, "label")
+  
+  DT <- data.table(y_true = y_true, y_prob = pred, key = "y_prob")
+  cleaner <- !duplicated(DT[, "y_prob"], fromLast = TRUE)
+  
+  DT[, tn_v := as.numeric(cumsum(y_true == 0))]
+  DT[, fp_v := cumsum(y_true == 1)]
+  DT <- DT[cleaner, ]
+  DT[, spec := tn_v / (tn_v + fp_v)]
+  
+  best_row <- which.max(DT$spec)
+  
+  if (length(best_row) > 0) {
+    return(list(metric = "spec", value = DT$spec[best_row[1]]))
+  } else {
+    return(list(metric = "spec", value = -1))
+  }
+  
+}
+
+param <- {'max_depth':2, 'eta':1, 'objective':'binary:logistic'}
 watchlist <- list(train = xgboost_train, test = xgboost_test)
 model <- xgb.train(data = xgboost_train,
                    objective = "binary:logistic",
                    # nthread = 2, # threads of the computer
-                   max.depth = 5,
+                   max.depth = 3,
                    eta = 0.001, # learning rate (gradient, [0,1]) https://machinelearningmastery.com/tune-learning-rate-for-gradient-boosting-with-xgboost-in-python/
-                   nrounds = 10000,
+                   nrounds = 25000,
                    # early_stopping_rounds = 10,
                    lambda = 10,
-                   watchlist = watchlist
+                   #scale_pos_weight = 0.5, # minimize false positive rate https://stackoverflow.com/questions/66716611/how-to-reduce-false-positives-in-xgboost
+                   # feval = xgb.max_specificity,
+                   watchlist = watchlist,
+                   print_every_n = 100
                    # tree_method = "gpu_hist"
                    )
+gc()
 
 curves <- rbind(model$evaluation_log[, .(iter, type = "train", values = train_error)],
                 model$evaluation_log[, .(iter, type = "test", values = test_error)])
@@ -283,6 +353,47 @@ pred_test
 
 # Confussion Matrix
 
-confusionMatrix(data = ifelse(pred_test > 0.5, 1, 0) %>% factor(levels = c(0, 1)),
+cm_threshold <- 0.5
+confusionMatrix(data = ifelse(pred_test > cm_threshold, 1, 0) %>% factor(levels = c(0, 1)),
                 reference = y_test %>% factor(levels = c(0, 1)),
                 positive = "1")
+
+
+klines3[sample, train := TRUE]
+klines3[, train := ifelse(is.na(train), FALSE, train)]
+klines3[!sample, pred_tests := ifelse(pred_test > cm_threshold, pred_test, NA)]
+
+symbol_plot <- pair#"BTCBUSD"
+p <- ggplot(klines3[symbol == symbol_plot],
+       # aes(x = open_time, y = open, text = paste("pred_tests:", pred_tests))) +
+       aes(x = open_time, y = open)) +
+  geom_line() +
+  geom_point(data = klines3[symbol == symbol_plot & target == 1 & train == FALSE], 
+             shape = 15, size = 3) + # test target
+  geom_point(data = klines3[symbol == symbol_plot & !is.na(pred_tests)],
+             shape = 23, color = "red") + # predicted target
+  ggtitle(symbol_plot)
+p %>% ggplotly()  
+
+
+# Maximizar specificity (1 - False Positive Rate)
+# Minimizar rombos rojos
+
+
+# To do:
+
+# Cross Validation
+
+# Grid Search
+
+# Backtesting
+
+# Re-entrenamiento
+# - Si datos actuales ya no se ajustan al cumulative distribution function (cdf) 
+# - Si bajan el specificity con respecto al calculado en entrenamiento.
+
+# Ejecución del modelo (multicore (uno por cada modelo))
+# - Obtención de datos 
+# - Procesamiento de datos
+# - Predicción de datos
+# - Ejecución de compras/ventas
