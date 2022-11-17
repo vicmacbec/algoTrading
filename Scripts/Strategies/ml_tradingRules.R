@@ -32,6 +32,7 @@ suppressMessages(library(lubridate))
 library(GGally)
 library(xgboost)
 library(caret)
+library(pROC)
 
 
 #### Functions ####
@@ -311,20 +312,113 @@ xgb.max_specificity <- function(pred, dtrain) {
   } else {
     return(list(metric = "spec", value = -1))
   }
-  
 }
 
-param <- {'max_depth':2, 'eta':1, 'objective':'binary:logistic'}
+
+#### Cross Validation ####
+
+param <- list(objective = "binary:logistic",
+              subsample = 0.8, #0.5,
+              colsample_bytree = 0.5,
+              max_depth = 5, #3, 
+              eta = 0.3, #0.001, # c(0.001, 0.01, 0.3), # learning rate (gradient, [0,1]) https://machinelearningmastery.com/tune-learning-rate-for-gradient-boosting-with-xgboost-in-python/
+              min_child = 1,
+              scale_pos_weight = 1,#c(0.5, 1, 1.5), # minimize false positive rate https://stackoverflow.com/questions/66716611/how-to-reduce-false-positives-in-xgboost
+              lambda = 10) # c(5, 10, 20))
 watchlist <- list(train = xgboost_train, test = xgboost_test)
-model <- xgb.train(data = xgboost_train,
-                   objective = "binary:logistic",
-                   # nthread = 2, # threads of the computer
-                   max.depth = 3,
-                   eta = 0.001, # learning rate (gradient, [0,1]) https://machinelearningmastery.com/tune-learning-rate-for-gradient-boosting-with-xgboost-in-python/
+model_cv <- xgb.cv(data = xgboost_train,
+                   params = param,
                    nrounds = 25000,
+                   nfold = 5,
                    # early_stopping_rounds = 10,
-                   lambda = 10,
-                   #scale_pos_weight = 0.5, # minimize false positive rate https://stackoverflow.com/questions/66716611/how-to-reduce-false-positives-in-xgboost
+                   # feval = xgb.max_specificity,
+                   watchlist = watchlist,
+                   print_every_n = 1000
+                   # tree_method = "gpu_hist"
+                   )
+gc()
+
+curves_avg <- rbind(model_cv$evaluation_log[, .(iter, type = "train_error_mean", values = train_error_mean)],
+                    model_cv$evaluation_log[, .(iter, type = "test_error_mean", values = test_error_mean)])
+curves_stdu <- rbind(model_cv$evaluation_log[, .(iter, type = "train_error_std_up", values = train_error_mean + train_error_std)],
+                     model_cv$evaluation_log[, .(iter, type = "test_error_std_up", values = test_error_mean + test_error_std)])
+curves_stdd <- rbind(model_cv$evaluation_log[, .(iter, type = "train_error_std_down", values = train_error_mean - train_error_std)],
+                     model_cv$evaluation_log[, .(iter, type = "test_error_std_down", values = test_error_mean - test_error_std)])
+
+curves <- rbind(curves_avg, 
+                rbind(curves_stdu, 
+                      curves_stdd))
+
+p <- ggplot(curves, aes(x = iter, y = values, color = type)) +
+  # geom_point() +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  # ggtitle("Features: All")
+  ggtitle("Features: Using feature importance")
+p %>% ggplotly()
+
+
+#### Grid Search with Cross Validation ####
+
+searchGridSubCol <- expand.grid(subsample = c(0.5, 0.8), 
+                                colsample_bytree = c(0.5, 0.8),
+                                max_depth = c(3, 5),
+                                min_child = seq(1), 
+                                eta = c(0.001, 0.01, 0.3),
+                                scale_pos_weight = c(0.2, 1, 2),
+                                lambda = c(5, 10, 20)
+                                )
+searchGridSubCol <- cbind(iter = 1:nrow(searchGridSubCol), searchGridSubCol)
+system.time(
+  xgboostHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
+    
+    print(paste0("Iter: ", parameterList[["iter"]]))
+    #Extract Parameters to test
+    param <- list(objective = "binary:logistic",
+                  subsample = parameterList[["subsample"]],
+                  colsample_bytree = parameterList[["colsample_bytree"]],
+                  max_depth = parameterList[["max_depth"]], 
+                  min_child = parameterList[["min_child"]],
+                  eta = parameterList[["eta"]], 
+                  scale_pos_weight = parameterList[["scale_pos_weight"]],
+                  lambda = parameterList[["lambda"]])
+    xgboostModelCV <- xgb.cv(data =  xgboost_train, 
+                             params = param,
+                             nrounds = 25000, 
+                             nfold = 5, 
+                             watchlist = watchlist,
+                             print_every_n = 1000
+                             # early_stopping_rounds = 10
+                             )
+    gc(); gc()
+    
+    xvalidationScores <- as.data.frame(xgboostModelCV$evaluation_log)
+    accuracy_test <- tail(xvalidationScores$test_error_mean, 1)
+    accuracy_train <- tail(xvalidationScores$train_error_mean, 1)
+    output <- return(c(accuracy_test = accuracy_test, 
+                       accuracy_train = accuracy_train, 
+                       SubsampleRate = parameterList[["subsample"]], 
+                       ColsampleRate = parameterList[["colsample_bytree"]], 
+                       Depth = parameterList[["max_depth"]], 
+                       Eta = parameterList[["eta"]], 
+                       MinChild = parameterList[["min_child"]],
+                       ScalePosWeight = parameterList[["scale_pos_weight"]],
+                       Lambda = parameterList[["lambda"]]))
+    }
+    )
+  )
+
+output <- as.data.table(t(xgboostHyperparameters))
+output
+
+fwrite(output, "~/Drive/Codigos/AlgoTrading/DataOut/MLRules/GridSearch/1GridSearch.csv")
+
+
+#### Best Model ####
+model <- xgb.train(data = xgboost_train,
+                   params = param,
+                   nrounds = 2500,
+                   early_stopping_rounds = 100,
                    # feval = xgb.max_specificity,
                    watchlist = watchlist,
                    print_every_n = 100
@@ -332,16 +426,17 @@ model <- xgb.train(data = xgboost_train,
                    )
 gc()
 
-curves <- rbind(model$evaluation_log[, .(iter, type = "train", values = train_error)],
-                model$evaluation_log[, .(iter, type = "test", values = test_error)])
-p <- ggplot(curves, aes(x = iter, y = values, color = type)) +
-  geom_point() +
-  geom_line() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  ggtitle("Features: All")
-  # ggtitle("Features: Using feature importance")
-p %>% ggplotly()
+curves_bestModel <- rbind(model$evaluation_log[, .(iter, type = "train_error", values = train_error)],
+                          model$evaluation_log[, .(iter, type = "test_error", values = test_error)])
 
+p <- ggplot(curves_bestModel, aes(x = iter, y = values, color = type)) +
+  # geom_point() +
+  geom_line() +
+  geom_point(aes(x = model$best_iteration, y = model$evaluation_log$test_error[model$best_iteration]), color = "black") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  # ggtitle("Features: All")
+  ggtitle("Features: Using feature importance")
+p %>% ggplotly()
 
 xgboost::xgb.importance(model = model)
 xgboost::xgb.plot.importance(xgb.importance(model = model))
@@ -351,14 +446,49 @@ xgboost::xgb.plot.importance(xgb.importance(model = model))
 pred_test <- predict(model, xgboost_test)
 pred_test
 
-# Confussion Matrix
+# Confussion Matrix Analysis
+i <- 0.6107571
+metrics <- NULL
+for(i in seq(0, 1, 0.01)){
+  cm_threshold <- i
+  cm <- confusionMatrix(data = ifelse(pred_test > cm_threshold, 1, 0) %>% factor(levels = c(0, 1)),
+                        reference = y_test %>% factor(levels = c(0, 1)),
+                        positive = "1")
+  metrics <- rbind(metrics,
+                   data.table(threshold = i,
+                              accuracy = cm$overall[1],
+                              sensitivity = cm$byClass[1],
+                              specificity = cm$byClass[2],
+                              F1 = cm$byClass[7]))
+}
+ggplot(metrics, aes(x = accuracy, y = specificity)) +
+  geom_line()
+ggplot(metrics, aes(x = sensitivity, y = specificity)) +
+  geom_line()
+ggplot(metrics, aes(x = threshold)) +
+  geom_line(aes(y = specificity), color = "red") +
+  geom_line(aes(y = sensitivity), color = "blue") +
+  geom_line(aes(y = accuracy), color = "black") +
+  geom_point(aes(x = threshold[which.max(accuracy)], y = max(accuracy))) +
+  geom_line(aes(y = F1), color = "green")
 
-cm_threshold <- 0.5
+pROC_obj <- roc(predictor = pred_test, response = y_test,
+                smoothed = TRUE,
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+                print.auc=TRUE, show.thres=TRUE)
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+best_threshold <- coords(pROC_obj, x="best", input="threshold", best.method="youden")
+best_threshold
+
+cm_threshold <- best_threshold[1] %>% as.numeric()
 confusionMatrix(data = ifelse(pred_test > cm_threshold, 1, 0) %>% factor(levels = c(0, 1)),
                 reference = y_test %>% factor(levels = c(0, 1)),
                 positive = "1")
 
-
+# Testing plots
 klines3[sample, train := TRUE]
 klines3[, train := ifelse(is.na(train), FALSE, train)]
 klines3[!sample, pred_tests := ifelse(pred_test > cm_threshold, pred_test, NA)]
@@ -381,6 +511,8 @@ p %>% ggplotly()
 
 
 # To do:
+
+# Probar más iteraciones en Colab
 
 # Cross Validation
 
