@@ -19,7 +19,7 @@ suppressMessages(library(binancer))
 # suppressMessages(library(keyring))
 suppressMessages(library(ggplot2))
 suppressMessages(library(plotly))
-# suppressMessages(library(scales))
+suppressMessages(library(patchwork))
 suppressMessages(library(data.table))
 suppressMessages(library(TTR))
 suppressMessages(library(stringr))
@@ -461,16 +461,24 @@ for(i in seq(0, 1, 0.01)){
                               specificity = cm$byClass[2],
                               F1 = cm$byClass[7]))
 }
-ggplot(metrics, aes(x = accuracy, y = specificity)) +
+p1 <- ggplot(metrics, aes(x = accuracy, y = specificity)) +
   geom_line()
-ggplot(metrics, aes(x = sensitivity, y = specificity)) +
+p2 <- ggplot(metrics, aes(x = sensitivity, y = specificity)) +
   geom_line()
-ggplot(metrics, aes(x = threshold)) +
-  geom_line(aes(y = specificity), color = "red") +
-  geom_line(aes(y = sensitivity), color = "blue") +
-  geom_line(aes(y = accuracy), color = "black") +
+p3 <- ggplot(metrics, aes(x = threshold)) +
+  geom_line(aes(y = specificity, color = "specificity")) +
+  geom_line(aes(y = sensitivity, color = "sensitivity")) +
+  geom_line(aes(y = accuracy, color = "accuracy")) +
   geom_point(aes(x = threshold[which.max(accuracy)], y = max(accuracy))) +
-  geom_line(aes(y = F1), color = "green")
+  geom_line(aes(y = F1, color = "F1")) +
+  geom_label(label = "Optimal accuracy", 
+             x = metrics[which.max(accuracy), threshold] + 0.06, y = metrics[, max(accuracy)] + 0.05,
+             label.padding = unit(0.35, "lines"), # Rectangle size around label
+             label.size = 0.05,
+             color = "black",
+             fill="#69b3a2")
+# p3 + (p1 / p2)
+(p1 + p2) / p3
 
 pROC_obj <- roc(predictor = pred_test, response = y_test,
                 smoothed = TRUE,
