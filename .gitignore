@@ -7,7 +7,7 @@ DataOut/*
 DataOut/MASlope_ATRStopLoss/*
 !/DataOut/MASlope_ATRStopLoss/Images/
 DataOut/MASlope_ATRStopLoss/Images/*
-!/DataOut/MASlope_ATRStopLoss/Images/candlesYieldLm.html
+# !/DataOut/MASlope_ATRStopLoss/Images/candlesYieldLm.html
 !/DataOut/MLRules/
 DataOut/MLRules/*
 !/DataOut/MLRules/Images/
