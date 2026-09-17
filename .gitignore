@@ -20,3 +20,12 @@ Credentials
 AWS
 *.csv
 *.gdsheet
+
+# Configuración personal de Claude Code (permisos locales; no se comparte)
+.claude/settings.local.json
+
+# Notas locales de Claude Code
+CLAUDE.local.md
+
+# Trazabilidad de runtime de proyectos con agentes (nunca se commitea)
+logs/
