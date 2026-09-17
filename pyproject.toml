@@ -1,0 +1,63 @@
+[project]
+name = "algotrading"
+version = "0.1.0"
+description = "Sistema de trading algorítmico cuantitativo sobre Binance"
+requires-python = ">=3.12,<3.13"
+
+# Versiones verificadas en PyPI al 2026-09-17. Se fijan con ~= para recibir
+# parches sin saltos de API; el lockfile de uv es la fuente de verdad exacta.
+dependencies = [
+    # Datos
+    "polars~=1.44",
+    "duckdb~=1.5",
+    "pyarrow~=25.0",
+    "numpy~=2.5",
+    # Modelado
+    "scikit-learn~=1.9",
+    "lightgbm~=4.7",
+    "optuna~=5.0",
+    # Motor de backtest
+    "numba~=0.67",
+    # Exchange
+    "python-binance~=1.0",
+    # Infraestructura
+    "python-dotenv~=1.2",
+    "httpx~=0.28",
+    "tqdm~=4.67",
+]
+
+[project.optional-dependencies]
+# Se instalan solo cuando se llega a la fase correspondiente.
+app = [
+    "streamlit~=1.64",
+    "plotly~=7.1",
+]
+aws = [
+    "boto3~=1.43",
+]
+
+[dependency-groups]
+dev = [
+    "pytest~=9.1",
+    "ruff~=0.14",
+]
+
+[tool.uv]
+# pandas no entra por defecto: el ETL es Polars. Se agrega solo si alguna
+# dependencia externa lo exige, y en ese caso fijado a 2.x (pandas 3 rompe
+# varias librerías del ecosistema de indicadores).
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

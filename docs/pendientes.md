@@ -1,10 +1,20 @@
 # Pendientes
 
-- [ ] Actualizar el despliegue de la EC2 y su crontab tras la migración a `src/`
-      Por qué falta: el renombre `Scripts/` → `src/` se hizo en el repo; la instancia
-      (`~/algoTrading/`) y las entradas de `crontab -e` siguen apuntando a la ruta vieja.
-      Por qué debe hacerse: la siguiente corrida programada falla con "No such file or
-      directory" hasta que se haga `git pull` en la instancia y se corrija el crontab.
+- [ ] Rotar las cuatro credenciales y sacarlas de Google Drive
+      Por qué falta: `config.yml` (llaves de Binance y de AWS) y `Credentials/` viven en texto
+      plano dentro de `~/Drive`, que Google sincroniza a la nube y donde conserva historial de
+      versiones. Nunca se commitearon, pero están expuestas fuera del equipo.
+      Por qué debe hacerse: las llaves de Binance permiten operar con dinero real, y el proyecto
+      va a habilitar permisos de trading. La plantilla y el destino ya existen
+      (`.env.example` → `~/.config/algotrading/.env`); falta la rotación, que es manual en las
+      consolas de Binance, AWS y GitHub, y purgar el historial de versiones en Drive.
+
+- [ ] Apagar el cron de la EC2 y decidir el destino de la instancia
+      Por qué falta: la instancia (`~/algoTrading/`) sigue con un crontab que apunta a rutas
+      previas a la migración y opera pares BUSD que ya no reciben datos.
+      Por qué debe hacerse: es un job que solo puede fallar o, peor, operar con datos
+      congelados. El sistema nuevo corre en local durante las fases de investigación y no
+      necesita la instancia encendida.
 
 - [ ] Migrar los pares de BUSD a USDT o USDC
       Por qué falta: todos los scripts se escribieron en 2022, cuando BUSD era el par de

@@ -56,3 +56,26 @@ que sí construyen órdenes válidas (cantidades, `minNotional`, decimales) vive
 `project-structure`. `git mv` conservó el historial; las rutas del wrapper `.sh`, del script
 productivo, del `.gitignore` y del README se actualizaron en el mismo commit. El despliegue de
 la EC2 y su crontab siguen apuntando a la ruta vieja y deben actualizarse por separado.
+
+**R congelado, sistema nuevo en Python (2026-09-17).** El proyecto pasa a un sistema
+cuantitativo en Python y el código R queda archivado en `src/legacy_r/` sin mantenimiento. Las
+razones son medidas, no de preferencia: el edge de la estrategia actual (+0.384% bruto por
+operación) es del mismo orden que su costo (0.15%–0.40% por round trip, 4.5 operaciones por par
+al mes), el modelo de ML tiene fugas que invalidan sus métricas, y el universo BUSD está muerto.
+El plan completo, con fases y criterios de paso, vive en el plan de trabajo aprobado; esta
+entrada solo registra la decisión arquitectónica.
+
+Consecuencias inmediatas:
+
+- **Ingesta propia point-in-time.** Se captura a diario `exchangeInfo` y `ticker/24hr` de spot y
+  de perpetuos USDⓈ-M (`src/data/snapshot_universe.py`, por cron local). La API solo responde por
+  los símbolos vivos hoy, así que sin este snapshot el sesgo de supervivencia es irreparable
+  hacia atrás. Es deliberadamente de biblioteca estándar: debe correr aunque el entorno falle.
+- **El histórico masivo no se baja por API** sino de los dumps públicos de `data.binance.vision`
+  (sin autenticación), incluidos `fundingRate` y `metrics` de futuros como features de régimen.
+- **Almacenamiento en Parquet consultado con DuckDB**, en vez de CSV reescritos completos. El
+  estado deja de ser un archivo que se sobrescribe y pasa a ser inmutable por partición.
+- **El entorno se fija con `uv` y lockfile**, con Python 3.12 y las dependencias declaradas en
+  `pyproject.toml`.
+- **Las credenciales salen del repo y de Google Drive** a `~/.config/algotrading/.env`. Ver
+  `docs/operacion.md`.

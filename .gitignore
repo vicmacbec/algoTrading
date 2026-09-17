@@ -14,8 +14,7 @@ DataOut/MLRules/*
 DataOut/MLRules/Images/*
 !/DataOut/MLRules/Images/1featureImportance.png
 .~lock*
-Scripts/keys.R
-src/keys.R
+keys.R
 config.yml
 Credentials
 AWS
@@ -30,3 +29,20 @@ CLAUDE.local.md
 
 # Trazabilidad de runtime de proyectos con agentes (nunca se commitea)
 logs/
+
+# Datos: artefactos de runtime, se reconstruyen con el pipeline de ingesta
+/data/
+
+# Secretos: el .env real vive en ~/.config/algotrading/, nunca aquí
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/

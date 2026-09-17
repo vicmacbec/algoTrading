@@ -1,109 +1,80 @@
 # Estructura y flujo
 
-Proyecto en **R** (se abre con [`AlgoTrading.Rproj`](../AlgoTrading.Rproj)) para investigar
-estrategias de trading de criptomonedas con datos de **Binance** (paquete `binancer`).
+El proyecto está en transición: el sistema nuevo se construye en **Python** y el código **R
+queda congelado** en `src/legacy_r/` (ver la decisión en [`arquitectura.md`](arquitectura.md)).
 
-Los scripts no forman un paquete: son análisis que se corren a mano en RStudio, sección por
-sección. La excepción es `MASlope_ATRStopL_Prod.R`, que se ejecuta con `Rscript` desde cron en
-una instancia **AWS EC2** (ver [`operacion.md`](operacion.md)).
-
-## Flujo general
+## Flujo objetivo
 
 ```
-Binance API (binance_klines)
-        │  velas OHLCV (1d / 4h / 5m)
-        ▼
-Indicadores técnicos (TTR, data.table): EMA, ATR, MA Slope, BBands, MACD, RSI, SSL...
-        ▼
-Reglas / señales (flags de alerta)  ──►  Backtest vela a vela (órdenes simuladas, stop loss, fee)
-        │                                      ▼
-        │                              Resumen de rendimiento por par (yield, cumYield, riskReward)
-        ▼                                      ▼
-Modelo ML (XGBoost) sobre indicadores     DataOut/<Estrategia>/  (CSV + imágenes)
-                                               ▼
-                                   (Producción) cron en EC2 → S3
+data.binance.vision (dumps públicos, sin auth)     API de Binance (diaria)
+        │  klines 4h/1d/1m, fundingRate, metrics          │  exchangeInfo, ticker/24hr
+        ▼                                                 ▼
+   data/raw/  (Parquet particionado)              data/raw/snapshots/  (universo point-in-time)
+        └───────────────────────┬─────────────────────────┘
+                                ▼
+                    src/features/  →  panel de features (multi-timeframe, cross-seccional)
+                                ▼
+                    src/labeling/  →  triple barrera resuelta con velas de 1m + MFE/MAE
+                                ▼
+                    src/strategies/ + src/validation/  →  reglas base, meta-modelo, purged CV
+                                ▼
+                    src/backtest/  →  backtest de portafolio con costos y capital finito
+                                ▼
+                    tracker SQLite + Streamlit  →  experimentos, backtests, operaciones
+                                ▼
+                    src/live/  →  paper trading y, después, ejecución real
 ```
 
-Las reglas de cada estrategia y sus fórmulas están en [`reglas-negocio.md`](reglas-negocio.md);
-los componentes y las decisiones de diseño, en [`arquitectura.md`](arquitectura.md).
-
-Todos los scripts siguen la plantilla [`src/template.R`](../src/template.R), con estas secciones:
-
-```
-Load libraries → Functions → Load data → Initial parameters →
-Strategy → Alert flags → Testing strategy → Plots → Saving data → Tests
-```
+La cadencia de decisión es de **4 horas**, pero la rotación esperada es de días: el presupuesto
+de costos no admite operar cada vela (ver [`reglas-negocio.md`](reglas-negocio.md)).
 
 ## Carpetas
 
-| Carpeta | Qué contiene |
-|---|---|
-| `src/` | Todo el código R y los wrappers `.sh`. |
-| `src/Strategies/` | Una estrategia por archivo, con su backtest. |
-| `src/Tests/` | Pruebas exploratorias de la API, indicadores, gráficos, comisiones y S3. |
-| `docs/` | Esta documentación (6 archivos fijos, ver skill `docs-maintainer`). |
-| `DataIn/` | Datos de entrada. Hoy solo `.gitkeep` y el acceso a `tradingJournal` (Google Sheet): los datos de mercado se bajan en vivo de la API. |
-| `DataOut/` | Resultados por estrategia (CSV, logs e imágenes). Casi todo ignorado por git. |
-| `AWS/` | Guías para montar EC2, RStudio Server, S3, Lambda y crontab. Ignorada por git. |
-| `Credentials/` | Llaves de Binance, token de GitHub y credenciales AWS. Ignorada por git. |
-
-No existe `test/`: el proyecto todavía no tiene pruebas unitarias (ver
-[`pendientes.md`](pendientes.md)).
+| Carpeta | Qué contiene | Estado |
+|---|---|---|
+| `src/data/` | Ingesta: snapshots del universo, descarga de dumps, normalización a Parquet, calidad de datos | En construcción |
+| `src/features/` | Familias de features: precio, volatilidad, flujo de órdenes, cross-seccionales, régimen, multi-timeframe | Pendiente (Fase 4) |
+| `src/labeling/` | Triple barrera, MFE/MAE, unicidad y pesos de muestra | Pendiente (Fase 4) |
+| `src/validation/` | Purged K-fold con embargo, walk-forward, Deflated Sharpe, PBO, Monte Carlo | Pendiente (Fase 5) |
+| `src/strategies/` | Reglas base (baselines) y meta-modelo | Pendiente (Fase 2) |
+| `src/backtest/` | Motor de portafolio, ejecución, sizing, restricciones y métricas | Pendiente (Fase 3) |
+| `src/live/` | Runner, gestión de órdenes, reconciliación, kill switch, reloj | Pendiente (Fase 6) |
+| `src/services/` | Lógica reutilizable: exchange, almacenamiento, tracker, notificaciones, fiscal | Pendiente |
+| `src/agentes/`, `src/tools/`, `src/prompts/`, `src/catalogos/`, `src/queries/` | Capa agéntica de **solo lectura**: reportes, triage y consulta del tracker | Pendiente |
+| `src/legacy_r/` | Todo el código R anterior, sin mantenimiento | **Congelado** |
+| `test/` | Pruebas unitarias, espejo de `src/` | En construcción |
+| `configs/` | YAML versionado de estrategias, universos y costos | Vacío |
+| `data/` | Artefactos de runtime: `raw/`, `curated/`, `features/`, `labels/`. **No versionado** | Activo |
+| `docs/` | Esta documentación (6 archivos fijos) | Activo |
+| `DataOut/MASlope_ATRStopLoss/` | Se conserva como **fixture de regresión** del motor nuevo | Congelado |
+| `AWS/`, `Credentials/` | Guías de infraestructura y credenciales. Ignoradas por git | A migrar |
 
 ## Archivos más importantes
 
-### `src/`
+### Sistema nuevo
 
-| Archivo | Uso | Uso estimado |
+| Archivo | Uso | Frecuencia |
 |---|---|---|
-| [`template.R`](../src/template.R) | Plantilla base para una estrategia nueva. | Solo al crear un script. |
-| [`binance.R`](../src/binance.R) | Primer prototipo: baja velas y calcula medias móviles, Bollinger, MACD y RSI con sus flags. | Histórico, ya cubierto por las estrategias. |
-| `keys.R` *(ignorado por git)* | Pruebas de manejo de credenciales con `keyring` y `config`. | Puntual. |
+| [`src/data/snapshot_universe.py`](../src/data/snapshot_universe.py) | Captura diaria de `exchangeInfo` y `ticker/24hr` de spot y perpetuos. **Solo biblioteca estándar**, a propósito: debe correr aunque el entorno falle. Es el único dato irrecuperable hacia atrás. | Diaria por cron (00:05 UTC) |
+| [`pyproject.toml`](../pyproject.toml) | Dependencias fijadas; `uv.lock` es la fuente de verdad exacta | Al cambiar dependencias |
+| [`.env.example`](../.env.example) | Plantilla de credenciales; el archivo real vive fuera del repo | Referencia |
 
-### `src/Strategies/`
+### Legacy en R (`src/legacy_r/`, congelado)
 
-La mayoría salen del ranking de *Trading Zone*; cada script lleva el enlace al video.
-
-| Archivo | Qué hace | Uso estimado |
+| Archivo | Qué hacía | Por qué se conserva |
 |---|---|---|
-| [`BB_RSI_MACD.R`](../src/Strategies/BB_RSI_MACD.R) | Todos los pares BUSD en 1d. RSI como señal principal, confirmada con Bollinger, y MACD para el cambio de tendencia. | Manual, exploratorio. |
-| [`pumNGo.R`](../src/Strategies/pumNGo.R) | Estrategia "pump and go" sobre todos los pares en 1d. | Manual, exploratorio. |
-| [`SSL.R`](../src/Strategies/SSL.R) / [`SSL_EMA.R`](../src/Strategies/SSL_EMA.R) | Canal SSL (con filtro EMA en la segunda versión) en velas de 5m; backtest por par. `SSL_EMA` guarda `DataOut/SSL_EMA/summaryAll.csv`. | Manual; ~15 min por corrida completa. |
-| [`RSI_MA_MA.R`](../src/Strategies/RSI_MA_MA.R) | Solo la plantilla con el enlace al video: sin implementar. | Sin uso. |
-| [`MASlope_ATRStopL.R`](../src/Strategies/MASlope_ATRStopL.R) | Versión de investigación de la estrategia principal: backtest de todos los pares en 4h; genera los CSV históricos y los gráficos (plotly). | Manual, al reajustar parámetros. |
-| [`MASlope_ATRStopL_Prod.R`](../src/Strategies/MASlope_ATRStopL_Prod.R) | **Único script productivo.** Recibe el par por argumento, lee `config.yml`, agrega las últimas velas de 4h a los CSV históricos y vuelve a correr la lógica (~8 s). Las llamadas a `binance_new_order` están comentadas: hoy solo simula. | Por cron cada 4 h cuando la EC2 está encendida. |
-| [`MASlope_ATRStopL_Prod.sh`](../src/Strategies/MASlope_ATRStopL_Prod.sh) | Wrapper de cron: ejecuta el `.R` con un símbolo (`FXSBUSD`) y manda la salida a `DataOut/MASlope_ATRStopLoss/allLogs/`. | Igual que el anterior. |
-| [`ml_tradingRules.R`](../src/Strategies/ml_tradingRules.R) | **En curso** (issue #9). ~10 años de velas diarias, indicadores como features, XGBoost con métrica de especificidad, cross-validation, grid search, matriz de confusión, ROC/AUC e índice de Youden. | En desarrollo activo. |
+| `Tests/binance.R` | Órdenes `LIMIT` y `STOP_LOSS_LIMIT`, cantidades válidas según `minNotional`, `stepSize` y decimales, `buyTrade()` | **El activo más valioso del repo**: esa lógica se porta a `src/services/exchange.py`, no se redescubre |
+| `Strategies/MASlope_ATRStopL.R` | Backtest de la estrategia MA Slope en 4h | Regla a portar como baseline de referencia |
+| `Strategies/MASlope_ATRStopL_Prod.R` + `.sh` | Versión productiva por cron en EC2 | Referencia del diseño operativo; el cron debe apagarse |
+| `Strategies/ml_tradingRules.R` | Modelo XGBoost | Referencia de **qué no repetir**: split aleatorio, etiqueta observable y features de nivel de precio |
+| `Strategies/{BB_RSI_MACD,SSL,SSL_EMA,pumNGo}.R` | Estrategias exploratorias | Ideas para las baselines |
 
-### `src/Tests/`
+Ningún script de R está en uso: hoy ni siquiera hay R instalado en el equipo.
 
-| Archivo | Uso |
-|---|---|
-| [`binance.R`](../src/Tests/binance.R) | El más importante de la carpeta: órdenes `LIMIT` y `STOP_LOSS_LIMIT` en modo test, cálculo de cantidades válidas según los filtros del par (`minNotional`, decimales) y las funciones `buyTrade()` y de venta. Base para operar en real. |
-| [`Indicators.R`](../src/Tests/Indicators.R) | Pruebas de indicadores y flags (MA Slope, ATR stop loss). |
-| [`plots.R`](../src/Tests/plots.R) | Gráficos de velas con plotly y tidyquant. |
-| [`fees.R`](../src/Tests/fees.R) | Cálculo de comisiones de compra y venta. |
-| [`awsS3.R`](../src/Tests/awsS3.R) | Conexión con `aws.s3`: sube y lee archivos del bucket `algotrading-vicmacbec`. |
-| [`crontabTime.sh`](../src/Tests/crontabTime.sh) | Prueba mínima para verificar que cron corre. |
+## Salidas
 
-### Raíz
-
-| Archivo | Uso |
-|---|---|
-| [`README.md`](../README.md) | Descripción breve del repo; la lista de estrategias está incompleta. |
-| [`binancePairsBUSD.R`](../binancePairsBUSD.R) | No es un script: es la salida pegada con la lista de ~300 pares BUSD de 2022. |
-| `config.yml` *(ignorado por git)* | Credenciales de Binance y AWS que leen los scripts. |
-
-## Salidas en `DataOut/`
-
-- `MASlope_ATRStopLoss/` — `Orders/allOrders_year_20220421.csv` (órdenes simuladas con su
-  rendimiento), `Trades/allData_year_4h_20220421.csv` (velas con indicadores), `myTrades/`,
-  `Logs/` y `allLogs/` (salida del cron, hoy vacías) e `Images/`.
-- `MLRules/` — `GridSearch/` con los resultados de la búsqueda de hiperparámetros e `Images/`
-  (importancia de features, bias-variance, ROC). Solo `1featureImportance.png` está versionado.
-- `SSL_EMA/` — `summaryAll.csv` con el comparativo por símbolo.
-- `tradingJournal.xlsx` y `Check.xlsx` — bitácora manual.
-
-Los porcentajes de uso de arriba son estimaciones a partir del diseño de cada script y de la
-configuración del cron: las carpetas de logs están vacías, así que no hay ejecuciones recientes
-registradas de las que derivarlos.
+- `data/raw/snapshots/YYYY-MM-DD/` — cuatro JSON comprimidos por día (~740 KB), más `_ok` con la
+  marca de tiempo de la corrida. La ausencia de `_ok` delata un día incompleto.
+- `data/raw/snapshots/cron.log` — bitácora del cron.
+- `DataOut/MASlope_ATRStopLoss/Orders/allOrders_year_20220421.csv` — 11,488 órdenes simuladas que
+  sirven de fixture de regresión para validar el motor de backtest nuevo.
