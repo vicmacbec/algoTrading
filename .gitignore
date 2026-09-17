@@ -14,6 +14,7 @@ DataOut/MLRules/*
 DataOut/MLRules/Images/*
 !/DataOut/MLRules/Images/1featureImportance.png
 .~lock*
+Scripts/keys.R
 src/keys.R
 config.yml
 Credentials
