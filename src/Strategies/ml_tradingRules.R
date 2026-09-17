@@ -264,6 +264,18 @@ y_test %>% table()
 # Scaling data
 # To get the column names into the lapply .SD function
 # https://stackoverflow.com/questions/59074426/using-sd-column-names-in-lapply-with-data-tables
+# # Getting mean values per column
+# x_test[, c(paste0(features, "_mean")) := lapply(seq_along(names(.SD)), 
+#                                function(y, n, i){ mean(unlist(x_train[, n[[i]], with = FALSE])) },
+#                                y = .SD,
+#                                n = names(.SD)), 
+#        .SDcols = features]
+# # Getting sd values per column
+# x_test[, c(paste0(features, "_sd")) := lapply(seq_along(names(.SD)), 
+#                                function(y, n, i){ sd(unlist(x_train[, n[[i]], with = FALSE])) },
+#                                y = .SD,
+#                                n = names(.SD)), 
+#        .SDcols = features]
 x_test[, c(features) := lapply(seq_along(names(.SD)), 
                                function(y, n, i){ (y[[i]] - mean(unlist(x_train[, n[[i]], with = FALSE]))) / sd(unlist(x_train[, n[[i]], with = FALSE])) },
                                y = .SD,
@@ -289,8 +301,7 @@ for(feature in features){
 par(mfrow=c(1,1))
 
 
-# Model
-# xgboost::xgb.cv()
+#### Model ####
 
 xgb.max_specificity <- function(pred, dtrain) {
   # https://github.com/Laurae2/Laurae/blob/master/R/xgb.max_specificity.R
@@ -314,18 +325,18 @@ xgb.max_specificity <- function(pred, dtrain) {
   }
 }
 
-
-#### Cross Validation ####
-
 param <- list(objective = "binary:logistic",
               subsample = 0.8, #0.5,
               colsample_bytree = 0.5,
               max_depth = 5, #3, 
               eta = 0.3, #0.001, # c(0.001, 0.01, 0.3), # learning rate (gradient, [0,1]) https://machinelearningmastery.com/tune-learning-rate-for-gradient-boosting-with-xgboost-in-python/
-              min_child = 1,
+              # min_child = 1,
               scale_pos_weight = 1,#c(0.5, 1, 1.5), # minimize false positive rate https://stackoverflow.com/questions/66716611/how-to-reduce-false-positives-in-xgboost
               lambda = 10) # c(5, 10, 20))
 watchlist <- list(train = xgboost_train, test = xgboost_test)
+
+
+#### Cross Validation ####
 model_cv <- xgb.cv(data = xgboost_train,
                    params = param,
                    nrounds = 25000,
@@ -514,21 +525,100 @@ p <- ggplot(klines3[symbol == symbol_plot],
 p %>% ggplotly()  
 
 
+#### Execute model for all data ####
+
+klines2[, 
+        .(symbol, open_time, close_time, 
+          open, high, low, close, volume, trades, 
+          ohlc4, ema, atr, maSlope, rollmean05, rollmean10, rollmean20, rollmean51,
+          dn, up, pctB, macd, signal, macdChange, RSI, shortStopLoss, longStopLoss, 
+          target)
+        ] %>% tail(6) -> klines3_
+# klines3_ <- klines3
+
+x_train <- klines3[sample, ..features]
+y_train <- klines3[sample, target]
+x_testAll <- klines3_[, ..features]
+y_testAll <- klines3_[, target]
+
+x_testAll[, c(features) := lapply(seq_along(names(.SD)), 
+                                  function(y, n, i){ (y[[i]] - mean(unlist(x_train[, n[[i]], with = FALSE]))) / sd(unlist(x_train[, n[[i]], with = FALSE])) },
+                                  y = .SD,
+                                  n = names(.SD)), 
+       .SDcols = features]
+
+xgboost_testAll <- xgb.DMatrix(data = data.matrix(x_testAll))
+# xgboost_testAll <- xgb.DMatrix(data = data.matrix(x_testAll), label = y_testAll)
+
+# Predictions
+pred_testAll <- predict(model, xgboost_testAll)
+pred_testAll
+
+confusionMatrix(data = ifelse(pred_testAll > cm_threshold, 1, 0) %>% factor(levels = c(0, 1)),
+                reference = y_testAll %>% factor(levels = c(0, 1)),
+                positive = "1")
+
+# Testing plots
+klines3[, train := FALSE]
+klines3[, train := ifelse(is.na(train), FALSE, train)]
+klines3[, pred_tests := ifelse(pred_testAll > cm_threshold, pred_testAll, NA)]
+
+symbol_plot <- pair#"BTCBUSD"
+p <- ggplot(klines3[symbol == symbol_plot],
+            # aes(x = open_time, y = open, text = paste("pred_tests:", pred_tests))) +
+            aes(x = open_time, y = open)) +
+  geom_line() +
+  geom_point(data = klines3[symbol == symbol_plot & target == 1 & train == FALSE], 
+             shape = 15, size = 3) + # test target
+  geom_point(data = klines3[symbol == symbol_plot & !is.na(pred_tests)],
+             shape = 23, color = "red") + # predicted target
+  ggtitle(symbol_plot)
+p %>% ggplotly()  
+
+
 # Maximizar specificity (1 - False Positive Rate)
 # Minimizar rombos rojos
 
 
 # To do:
 
+
+# Quizás agregar info relacionada a la cantidad de órdenes puestas para ventas y compras (bids y tasks)
+binance_depth("BTCBUSD")
+binance_ticks("BTCBUSD")
+
+start_time <- as.POSIXct('2019-09-18 18:00:00')
+end_time <- Sys.time()
+totalHours <- difftime(end_time, start_time, units = "hours") %>% floor()
+
+ticksMeasures <- NULL
+for(date_start in 1:totalHours){
+  
+  end_time <- start_time + 3600
+  
+  ticks <- binance_ticks("BTCBUSD", start_time = start_time, end_time = end_time)
+
+  if(!is.null(ticks)){
+    
+    ticksMeasures <- rbind(ticksMeasures,
+                           ticks[, .(time = start_time, count = .N, quantity = sum(quantity)), 
+                                 keyby = .(buyer_maker)])
+  }
+  
+  start_time <- start_time + 3600
+  
+}
+
+
+
+
 # Probar más iteraciones en Colab
 
-# Cross Validation
-
-# Grid Search
-
 # Backtesting
+# - Crear set de datos de validación
 
 # Re-entrenamiento
+# - Guardar x_train (quizás volver a entrenar con todos los datos) para escalar datos a futuro usando esos datos
 # - Si datos actuales ya no se ajustan al cumulative distribution function (cdf) 
 # - Si bajan el specificity con respecto al calculado en entrenamiento.
 
