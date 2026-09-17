@@ -3,6 +3,16 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [2edc8a5] 2026-09-17
+Se agregó `keys.R` al `.gitignore` en sus dos rutas posibles (`Scripts/` y `src/`), en las tres
+ramas — tras el renombre de la carpeta, cada rama ignoraba solo una de ellas, así que al cambiar
+de rama el archivo de credenciales quedaba visible y podía subirse por error.
+
+## [3b81b8a] 2026-09-17
+Se integró `developments` en esta rama para incorporar el commit `f8fd03b` (ejecución del modelo
+de ML sobre los datos recientes), hecho después de que esta rama se creó. El archivo llegó a su
+ruta nueva, `src/Strategies/ml_tradingRules.R`, por detección de renombre.
+
 ## [aad8789] 2026-09-16
 Se sustituyó `docs/estructura-del-proyecto.md` por los 6 archivos fijos de la convención —
 la documentación estaba en un solo archivo que mezclaba estructura, arquitectura, reglas de
