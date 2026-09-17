@@ -12,9 +12,13 @@ sin depender del entorno de uv ni de ninguna dependencia instalada.
 Uso:
     python3 src/data/snapshot_universe.py [--out DIR] [--force]
 
-Cron (diario a las 00:05 UTC):
-    5 0 * * * cd ~/Drive/Codigos/AlgoTrading && /usr/bin/python3 \
+Cron (dos veces al día; cron usa hora LOCAL, no UTC):
+    5 9,21 * * * cd ~/Drive/Codigos/AlgoTrading && /usr/bin/python3 \
         src/data/snapshot_universe.py >> data/raw/snapshots/cron.log 2>&1
+
+Son dos corridas porque el script es idempotente: la segunda no descarga nada
+si la primera funcionó, y así un día con el equipo apagado a una de las dos
+horas no se pierde. La carpeta destino siempre se nombra con la fecha UTC.
 """
 
 from __future__ import annotations

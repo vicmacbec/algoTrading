@@ -51,12 +51,17 @@ python3 src/data/snapshot_universe.py            # idempotente: si ya existe el 
 python3 src/data/snapshot_universe.py --force    # re-descarga
 ```
 
-Ya está instalado en cron (00:05 UTC):
+Ya está instalado en cron, **dos veces al día**:
 
 ```
-5 0 * * * cd /home/vicmacbec/Drive/Codigos/AlgoTrading && /usr/bin/python3 \
+5 9,21 * * * cd /home/vicmacbec/Drive/Codigos/AlgoTrading && /usr/bin/python3 \
     src/data/snapshot_universe.py >> data/raw/snapshots/cron.log 2>&1
 ```
+
+Cron usa la **hora local** (`America/Mexico_City`), no UTC: dispara a las 09:05 y 21:05 CST,
+es decir 15:05 y 03:05 UTC. Son dos corridas porque el script es idempotente —la segunda no
+descarga nada si la primera funcionó— y así un día en que el equipo esté apagado a una de las
+dos horas no se pierde. El nombre de la carpeta siempre se calcula en UTC.
 
 Usa solo la biblioteca estándar a propósito, para que no dependa del entorno de uv.
 

@@ -55,7 +55,7 @@ de costos no admite operar cada vela (ver [`reglas-negocio.md`](reglas-negocio.m
 
 | Archivo | Uso | Frecuencia |
 |---|---|---|
-| [`src/data/snapshot_universe.py`](../src/data/snapshot_universe.py) | Captura diaria de `exchangeInfo` y `ticker/24hr` de spot y perpetuos. **Solo biblioteca estándar**, a propósito: debe correr aunque el entorno falle. Es el único dato irrecuperable hacia atrás. | Diaria por cron (00:05 UTC) |
+| [`src/data/snapshot_universe.py`](../src/data/snapshot_universe.py) | Captura diaria de `exchangeInfo` y `ticker/24hr` de spot y perpetuos. **Solo biblioteca estándar**, a propósito: debe correr aunque el entorno falle. Es el único dato irrecuperable hacia atrás. | Cron 09:05 y 21:05 local |
 | [`pyproject.toml`](../pyproject.toml) | Dependencias fijadas; `uv.lock` es la fuente de verdad exacta | Al cambiar dependencias |
 | [`.env.example`](../.env.example) | Plantilla de credenciales; el archivo real vive fuera del repo | Referencia |
 

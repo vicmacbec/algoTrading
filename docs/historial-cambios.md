@@ -3,6 +3,14 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [d0acf6e] 2026-09-17
+Arranca el sistema cuantitativo en Python (entorno con uv sobre 3.12, captura diaria del
+universo point-in-time por cron, primera suite de pruebas) y se archiva el código R en
+`src/legacy_r/` — el edge de la estrategia anterior resultó del mismo orden de magnitud que su
+costo y el modelo de ML tenía fugas que invalidaban sus métricas, así que se reconstruye en vez
+de parchearse. El snapshot diario se instala primero porque es el único dato que no se puede
+reconstruir hacia atrás.
+
 ## [2edc8a5] 2026-09-17
 Se agregó `keys.R` al `.gitignore` en sus dos rutas posibles (`Scripts/` y `src/`), en las tres
 ramas — tras el renombre de la carpeta, cada rama ignoraba solo una de ellas, así que al cambiar
