@@ -3,6 +3,13 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [d823e36] 2026-09-17
+La captura del universo pasa a `mx-central-1` y `us-east-2` se desmantela — desde México los
+cuatro hosts de Binance responden 200, futuros incluidos. Al verificar aparecieron dos fallos
+silenciosos que quedan documentados: una invocación con 200 no prueba nada si el script omitió
+el trabajo por idempotencia, y Lambda se queda muda en vez de fallar cuando el rol no le permite
+escribir sus logs. La memoria sube a 512 MB porque el pico real rozaba el 93 % de los 256 MB.
+
 ## [b50df3c] 2026-09-17
 El snapshot gana destino S3 y `lambda_handler`, y se descubre que **Binance responde HTTP 451 a
 las IPs de Estados Unidos**: la función desplegada en `us-east-2` no pudo descargar ni un
