@@ -3,6 +3,15 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [7c10699] 2026-09-18
+Universo point-in-time: qué pares existían y eran operables en cada fecha, cruzando el índice del
+bucket (que llega a 2017) con los snapshots diarios (que dan los assets y el `status`
+autoritativos). Sin esto el universo de cualquier backtest se elegiría con los pares vivos hoy,
+que es justo el sesgo de supervivencia. Contrastar la heurística de partición de nombres contra
+los 3705 símbolos reales descartó dos reglas antes de dar con la buena —del 0.27 % al 0.08 % de
+error— y reveló que los pares entre stablecoins ocupaban cuatro puestos del top 30 por volumen
+sin moverse: se excluyen por defecto.
+
 ## [fe83233] 2026-09-18
 Revisión completa de `docs/`: los cinco documentos seguían describiendo el proyecto en R como si
 fuera el sistema actual —el diagrama de componentes con `binancer`, `config.yml` y el cron de la
