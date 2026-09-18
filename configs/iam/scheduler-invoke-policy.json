@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvocarSoloLaLambdaDelSnapshot",
+      "Effect": "Allow",
+      "Action": ["lambda:InvokeFunction"],
+      "Resource": "arn:aws:lambda:us-east-2:<ACCOUNT_ID>:function:algotrading-snapshot"
+    }
+  ]
+}

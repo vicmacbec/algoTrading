@@ -101,10 +101,26 @@ data/futures/um/daily/metrics/...            (open interest)
 El histórico llega hasta 2017-08 para BTCUSDT y ETHUSDT. Cada archivo trae su `.CHECKSUM`, que
 debe verificarse al descargar. El módulo de ingesta se implementa en la Fase 1.
 
-## Producción en AWS (pendiente, Fase 6-7)
+## AWS
+
+Cuenta configurada con el perfil `algotrading` en `~/.aws/credentials` (región `us-east-2`), con
+un usuario IAM de mínimo privilegio. **Las llaves de AWS no van en el `.env` del proyecto**: el
+perfil del CLI es la única fuente.
+
+Los documentos de política viven versionados en [`configs/iam/`](../../configs/iam/), con su
+propio README que explica qué se adjunta a qué, los comandos de despliegue y por qué dos
+cláusulas concretas (`AdjuntarSoloPoliticaBasica` y `PasarSoloRolesDelProyecto`) son lo que
+impide una escalada de privilegios.
+
+Bucket del proyecto: `algotrading-vicmacbec-data` en `us-east-2`, con los snapshots bajo el
+prefijo `snapshots/`.
+
+### Producción (pendiente, Fase 6-7)
 
 El diseño aprobado es **Lambda arm64 + EventBridge Scheduler** cada 4 horas (dentro del free
 tier), con S3 para datos y Secrets Manager para credenciales: del orden de 1.5 a 5 USD al mes.
+El snapshot diario se migra ahí primero, porque EventBridge programa en UTC y elimina la
+dependencia de que la laptop esté encendida.
 
 Queda **descartado** el estimado de `AWS/My_AWS_Estimate.csv` (t4g.2xlarge + 1 TB de S3 =
 55.59 USD/mes): cuesta más que el capital que se va a operar. Lo que permite prescindir de una
