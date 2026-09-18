@@ -43,11 +43,11 @@ de costos no admite operar cada vela (ver [`reglas-negocio.md`](reglas-negocio.m
 | `src/agentes/`, `src/tools/`, `src/prompts/`, `src/catalogos/`, `src/queries/` | Capa agéntica de **solo lectura**: reportes, triage y consulta del tracker | Pendiente |
 | `src/legacy_r/` | Todo el código R anterior, sin mantenimiento | **Congelado** |
 | `test/` | Pruebas unitarias, espejo de `src/` | En construcción |
-| `configs/` | YAML versionado de estrategias, universos y costos | Vacío |
+| `configs/` | Políticas IAM versionadas, script de despliegue y sonda de región | Activo |
 | `data/` | Artefactos de runtime: `raw/`, `curated/`, `features/`, `labels/`. **No versionado** | Activo |
 | `docs/` | Esta documentación (6 archivos fijos) | Activo |
 | `DataOut/MASlope_ATRStopLoss/` | Se conserva como **fixture de regresión** del motor nuevo | Congelado |
-| `AWS/`, `Credentials/` | Guías de infraestructura y credenciales. Ignoradas por git | A migrar |
+| `AWS/` | Guías de EC2 y RStudio del esquema anterior. Ignorada por git. `Credentials/` y `config.yml` ya se eliminaron | Histórica |
 
 ## Archivos más importantes
 
@@ -74,8 +74,20 @@ Ningún script de R está en uso: hoy ni siquiera hay R instalado en el equipo.
 
 ## Salidas
 
-- `data/raw/snapshots/YYYY-MM-DD/` — cuatro JSON comprimidos por día (~740 KB), más `_ok` con la
-  marca de tiempo de la corrida. La ausencia de `_ok` delata un día incompleto.
-- `data/raw/snapshots/cron.log` — bitácora del cron.
+**Snapshots del universo**, una carpeta por día UTC con cinco archivos y ~736 KB comprimidos
+(~270 MB al año). Destino principal `s3://algotrading-vicmacbec-data/snapshots/`, escrito por la
+Lambda; `data/raw/snapshots/` es el respaldo local mientras dure el traslape del cron.
+
+| Archivo | Crudo | Contenido | Para qué |
+|---|---|---|---|
+| `spot_exchange_info.json.gz` | 16.8 MB | 3705 símbolos, 26 campos: `status`, `baseAsset`/`quoteAsset`, precisiones, `orderTypes` y los `filters` (`PRICE_FILTER`, `LOT_SIZE`, `NOTIONAL`) | Universo point-in-time y reglas de orden válidas, que cambian con el tiempo |
+| `spot_ticker_24hr.json.gz` | 1.8 MB | 3708 registros, 21 campos: `lastPrice`, `bid`/`ask` con cantidades, `volume`, `quoteVolume`, `count` | Elegibilidad por liquidez y estimación del spread del día |
+| `um_exchange_info.json.gz` | 1.1 MB | 897 perpetuos, 25 campos, incluidos `contractType`, `onboardDate`, `maintMarginPercent` | Universo de futuros (Fase 9) |
+| `um_ticker_24hr.json.gz` | 0.3 MB | 766 registros, 16 campos | Liquidez de perpetuos |
+| `_ok` | 25 B | Marca ISO de la corrida | Auditoría: si falta, el día quedó incompleto |
+
+**Otras salidas:**
+
+- `data/raw/snapshots/cron.log` — bitácora del cron local de respaldo.
 - `DataOut/MASlope_ATRStopLoss/Orders/allOrders_year_20220421.csv` — 11,488 órdenes simuladas que
   sirven de fixture de regresión para validar el motor de backtest nuevo.

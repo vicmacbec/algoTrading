@@ -1,131 +1,140 @@
 # Arquitectura
 
-## Componentes
+## Componentes del sistema actual
 
 ```mermaid
 flowchart TD
-    A[Binance API<br/>paquete binancer] -->|binance_klines: velas OHLCV| B[Script de estrategia en R<br/>data.table + TTR]
-    B --> C[Indicadores<br/>EMA, ATR, MA Slope, BBands, MACD, RSI]
-    C --> D[Señales / flags de alerta]
-    D --> E[Backtest vela a vela<br/>órdenes simuladas + stop loss]
-    E --> F[(DataOut/&lt;Estrategia&gt;/<br/>CSV de órdenes y velas)]
-    C --> G[Modelo XGBoost<br/>ml_tradingRules.R]
-    G --> F
-    F --> H[Gráficos<br/>ggplot2 / plotly]
-    I[cron en EC2] -->|Rscript con el par como argumento| B
-    F -.->|aws.s3| J[(Bucket S3<br/>algotrading-vicmacbec)]
-    K[config.yml] -->|credenciales| B
+    subgraph fuentes[Fuentes de datos]
+        A[data.binance.vision<br/>volcados ZIP, sin auth]
+        B[API de Binance<br/>exchangeInfo, ticker/24hr]
+    end
+
+    A -->|klines 4h/1d/1m, fundingRate, metrics| C[src/data/binance_vision.py<br/>listado, checksum, normalización]
+    B -->|diario| D[src/data/snapshot_universe.py<br/>Lambda en mx-central-1]
+
+    C --> E[(data/ en Parquet<br/>particionado por símbolo y año)]
+    D --> F[(S3 snapshots/<br/>universo point-in-time)]
+
+    E --> G[src/features/<br/>precio, volatilidad, flujo, cross-seccional]
+    F --> G
+    G --> H[src/labeling/<br/>triple barrera con 1m, MFE/MAE]
+    H --> I[src/strategies/ + src/validation/<br/>baselines, meta-modelo, purged CV]
+    I --> J[src/backtest/<br/>portafolio, costos, capital finito]
+    J --> K[(tracker SQLite<br/>experimentos y backtests)]
+    K --> L[src/live/<br/>paper y ejecución real]
+    M[~/.config/algotrading/.env] -->|credenciales| L
 ```
 
-- **Ingesta:** no hay base de datos ni capa de persistencia propia. Cada corrida pide las velas
-  a Binance con `binance_klines()` y, en el script productivo, las concatena a los CSV
-  históricos que ya existen en `DataOut/`.
-- **Cómputo:** todo en memoria con `data.table`; los indicadores vienen de `TTR` salvo el MA
-  Slope, que se calcula a mano (ver [`reglas-negocio.md`](reglas-negocio.md)).
-- **Persistencia:** archivos CSV en `DataOut/`, una carpeta por estrategia. El estado del
-  backtest (`allOrders`, `allData`) vive en esos CSV: el script productivo los lee, los
-  reescribe completos y no guarda nada más.
-- **Ejecución programada:** un wrapper `.sh` llamado desde crontab en la EC2 invoca el `.R` con
-  el símbolo como argumento y redirige la salida a un log por corrida.
-- **Distribución:** `aws.s3` para subir y leer los CSV desde el bucket, de modo que la EC2 y la
-  máquina local compartan los mismos datos.
+- **Ingesta histórica:** los volcados públicos de `data.binance.vision`, no la API. Son ZIP con
+  checksum, sin autenticación y sin límite de rate; por la API serían cientos de miles de
+  peticiones. Incluye los pares delistados, que es lo que permite un universo point-in-time.
+- **Ingesta point-in-time:** una Lambda diaria captura `exchangeInfo` y `ticker/24hr`. La API
+  solo responde por los símbolos vivos hoy, así que sin este snapshot el sesgo de supervivencia
+  es irreparable hacia atrás.
+- **Persistencia:** Parquet inmutable particionado, consultado con DuckDB. Nada de archivos que
+  se reescriben completos.
+- **Cómputo:** local durante investigación (Polars + DuckDB); la nube solo para lo que debe
+  correr sin la laptop encendida.
+- **Ejecución programada:** EventBridge Scheduler en UTC, que elimina la dependencia de la zona
+  horaria local.
 
-## Decisiones tomadas
+## Decisiones vigentes
 
-**CSV en vez de base de datos.** El volumen es de miles de velas por par y el consumo es
-siempre "leer todo, recalcular, reescribir". Un CSV por estrategia mantiene el proyecto
-portable entre la laptop y la EC2 sin infraestructura extra; el costo es que no hay escrituras
-concurrentes ni consultas parciales.
+**Parquet inmutable en vez de CSV reescritos.** El sistema anterior mantenía su estado en CSV
+que se leían enteros y se sobrescribían. Eso impide escrituras concurrentes, consultas parciales
+y cualquier auditoría de qué había el martes pasado. Las particiones de Parquet no se tocan una
+vez escritas.
 
-**Dos versiones del mismo algoritmo.** `MASlope_ATRStopL.R` (investigación, todos los pares,
-gráficos) y `MASlope_ATRStopL_Prod.R` (un par, sin gráficos, ~8 s). La versión productiva se
-mantiene mínima para que quepa en una corrida de cron; la de investigación carga librerías
-pesadas (plotly, patchwork) que en producción no hacen falta.
+**El entorno se fija con `uv` y lockfile.** Python 3.12, dependencias declaradas en
+`pyproject.toml` y `uv.lock` versionado. El Python del sistema no tiene `pip`, así que uv además
+resuelve el problema de arranque sin sudo.
 
-**Rutas absolutas conmutadas a mano.** Los scripts declaran las rutas de local
-(`~/Drive/Codigos/AlgoTrading/`) y de la EC2 (`~/algoTrading/`), y se cambia de entorno
-comentando líneas. Es la fuente de error más probable al desplegar; está registrado como
-pendiente en [`pendientes.md`](pendientes.md).
+**Las credenciales viven fuera del repo y fuera de Google Drive**, en
+`~/.config/algotrading/.env` con permisos 600. Dos llaves de Binance separadas, una de solo
+lectura y otra con permiso de trade, ninguna con retiro y ambas con IP allowlist. Ver
+[`operacion.md`](operacion.md).
 
-**Órdenes reales desactivadas.** Las llamadas a `binance_new_order()` están comentadas en el
-script productivo: hoy el sistema es paper trading y su única salida son los CSV. Las funciones
-que sí construyen órdenes válidas (cantidades, `minNotional`, decimales) viven en
-[`src/Tests/binance.R`](../src/Tests/binance.R) y son el punto de partida para operar en real.
+**El stop loss vive en el exchange como orden OCO, no en el bot.** Es lo que permite prescindir
+de un proceso encendido permanentemente: si la Lambda no corre, la protección sigue puesta.
 
-**Migración de `Scripts/` a `src/` (2026-09-16).** Se adoptó la convención de la skill
-`project-structure`. `git mv` conservó el historial; las rutas del wrapper `.sh`, del script
-productivo, del `.gitignore` y del README se actualizaron en el mismo commit. El despliegue de
-la EC2 y su crontab siguen apuntando a la ruta vieja y deben actualizarse por separado.
+**La capa agéntica es de solo lectura.** Reportes, triage y consulta del tracker; nunca decide
+operaciones, nunca escribe en tablas de estado y nunca tiene credenciales del exchange. Un LLM
+en el lazo de decisión no es determinista ni backtesteable con honestidad.
 
-**R congelado, sistema nuevo en Python (2026-09-17).** El proyecto pasa a un sistema
-cuantitativo en Python y el código R queda archivado en `src/legacy_r/` sin mantenimiento. Las
-razones son medidas, no de preferencia: el edge de la estrategia actual (+0.384% bruto por
-operación) es del mismo orden que su costo (0.15%–0.40% por round trip, 4.5 operaciones por par
-al mes), el modelo de ML tiene fugas que invalidan sus métricas, y el universo BUSD está muerto.
-El plan completo, con fases y criterios de paso, vive en el plan de trabajo aprobado; esta
-entrada solo registra la decisión arquitectónica.
+## Binance bloquea las IPs de Estados Unidos (2026-09-18)
 
-Consecuencias inmediatas:
+La región de AWS es una decisión de arquitectura, no de latencia. Al desplegar la Lambda del
+snapshot en `us-east-2` (Ohio), los cuatro endpoints devolvieron **HTTP 451 "Unavailable For
+Legal Reasons"**. Comprobado con una Lambda sonda desechable
+(`configs/probe-binance-region.sh`):
 
-- **Ingesta propia point-in-time.** Se captura a diario `exchangeInfo` y `ticker/24hr` de spot y
-  de perpetuos USDⓈ-M (`src/data/snapshot_universe.py`, por cron local). La API solo responde por
-  los símbolos vivos hoy, así que sin este snapshot el sesgo de supervivencia es irreparable
-  hacia atrás. Es deliberadamente de biblioteca estándar: debe correr aunque el entorno falle.
-- **El histórico masivo no se baja por API** sino de los dumps públicos de `data.binance.vision`
-  (sin autenticación), incluidos `fundingRate` y `metrics` de futuros como features de régimen.
-- **Almacenamiento en Parquet consultado con DuckDB**, en vez de CSV reescritos completos. El
-  estado deja de ser un archivo que se sobrescribe y pasa a ser inmutable por partición.
-- **El entorno se fija con `uv` y lockfile**, con Python 3.12 y las dependencias declaradas en
-  `pyproject.toml`.
-- **Las credenciales salen del repo y de Google Drive** a `~/.config/algotrading/.env`. Ver
-  `docs/operacion.md`.
-
-**Binance bloquea las IPs de Estados Unidos: la región de AWS es una decisión de arquitectura,
-no de latencia (2026-09-18).** Al desplegar la Lambda del snapshot en `us-east-2` (Ohio), los
-cuatro endpoints devolvieron **HTTP 451 "Unavailable For Legal Reasons"**. Se comprobó con una
-Lambda sonda desechable (`configs/probe-binance-region.sh`) desde esa región:
-
-| Host | Desde us-east-2 |
-|---|---|
-| `api.binance.com`, `api1`, `api-gcp` (spot) | 451 bloqueado |
-| `fapi.binance.com` (futuros) | 451 bloqueado |
-| `data-api.binance.vision` (spot público) | 200 OK |
-| `data.binance.vision` (dumps históricos) | 200 OK |
+| Host | us-east-2 | mx-central-1 |
+|---|---|---|
+| `api.binance.com`, `api1`, `api-gcp` (spot) | 451 bloqueado | 200 OK |
+| `fapi.binance.com` (futuros) | 451 bloqueado | 200 OK |
+| `data-api.binance.vision` (spot público) | 200 OK | 200 OK |
+| `data.binance.vision` (dumps históricos) | 200 OK | 200 OK |
 
 Consecuencias:
 
-- **La ingesta histórica no está en riesgo**: los dumps de `data.binance.vision` sí se descargan
-  desde EE.UU., así que la Fase 1 puede correr en cualquier región.
-- **El spot en vivo tiene alternativa**: `data-api.binance.vision` devuelve exactamente el mismo
-  `exchangeInfo` (3705 símbolos, mismos campos), verificado contra el original.
-- **Los futuros no la tienen**: `data-api.binance.vision` no sirve `/fapi` (404). Sin funding
-  rate ni open interest desde EE.UU. no hay features de régimen, que el plan sí contempla.
-- Por eso el cómputo se mueve a **`mx-central-1`**, fuera de la jurisdicción bloqueada y en la
-  misma que el operador. El bucket permanece en `us-east-2`: la escritura entre regiones
-  funciona y 0.26 GB al año de transferencia cuesta centavos, así que no justifica moverlo.
-- Los roles de IAM son globales y se reutilizan tal cual; las políticas dejaron de fijar la
-  región en sus ARNs (`arn:aws:lambda:*:...:function:algotrading-*`) y siguen acotadas por el
-  prefijo del nombre.
+- **La ingesta histórica no está en riesgo**: los dumps se descargan incluso desde EE.UU.
+- **El spot en vivo tiene alternativa** (`data-api.binance.vision`, mismo `exchangeInfo`
+  verificado campo a campo), **pero los futuros no**: ese host no sirve `/fapi`. Sin funding rate
+  ni open interest no hay features de régimen.
+- Por eso el cómputo vive en **`mx-central-1`**, fuera de la jurisdicción bloqueada y en la misma
+  que el operador. El bucket permanece en `us-east-2`: la escritura entre regiones funciona y
+  0.26 GB al año de transferencia cuesta centavos.
+- Los roles de IAM son globales y se reutilizan; las políticas dejaron de fijar la región en sus
+  ARNs y siguen acotadas por el prefijo `algotrading-*`.
 
-La lección general para lo que viene: **cualquier componente que hable con Binance debe vivir
-fuera de EE.UU.**, y eso incluye la ejecución de órdenes cuando llegue. Verificar la
-alcanzabilidad con la sonda antes de desplegar en una región nueva.
+**Regla para lo que viene: cualquier componente que hable con Binance debe vivir fuera de
+EE.UU.**, incluida la ejecución de órdenes. Verificar con la sonda antes de desplegar en una
+región nueva.
 
-**Resultado de la migración (2026-09-18).** La sonda en `mx-central-1` devolvió 200 en los
-cuatro hosts, futuros incluidos. Ahí quedan la función `algotrading-snapshot` (python3.12,
-arm64, 512 MB, 120 s) y el schedule `algotrading-snapshot-diario` con `cron(10 0 * * ? *)` en
-UTC; `us-east-2` se desmanteló por completo. El bucket permanece en `us-east-2` y la escritura
-entre regiones funciona sin fricción. Una corrida real tarda ~7 s y usa 200 MB.
+Estado tras la migración: la función `algotrading-snapshot` (python3.12, arm64, 512 MB, 120 s) y
+el schedule `algotrading-snapshot-diario` con `cron(10 0 * * ? *)` en UTC. Una corrida real tarda
+~7 s y usa 200 MB. `us-east-2` quedó desmantelado.
 
-Dos trampas que costaron tiempo y conviene no repetir:
+## Trampas encontradas, para no repetirlas
 
-- **Una invocación exitosa no prueba nada si el trabajo se omitió.** Las dos primeras pruebas
-  devolvieron 200 porque los objetos del día ya existían y el script es idempotente: nunca
-  llegaron a llamar a Binance ni a escribir. El camino de escritura solo queda demostrado
-  forzando la corrida (`{"force": true}`).
+- **Una invocación exitosa no prueba nada si el trabajo se omitió.** Las dos primeras pruebas de
+  la Lambda devolvieron 200 porque los objetos del día ya existían y el script es idempotente:
+  nunca llamaron a Binance ni escribieron. El camino de escritura solo queda demostrado forzando
+  la corrida (`{"force": true}`).
 - **Lambda no falla cuando no puede escribir sus logs, simplemente se calla.** El rol de
-  ejecución se creó con una versión previa de la política que fijaba
-  `arn:aws:logs:us-east-2:...`; en `mx-central-1` la función escribía en S3 con normalidad
-  mientras CloudWatch permanecía vacío. Al corregir el ARN a `arn:aws:logs:*:...` aparecieron
-  los logs. Moraleja: **el documento que está en AWS no es el que está en el repo** hasta que
-  alguien lo aplica, y un componente mudo no es un componente sano.
+  ejecución tenía `arn:aws:logs:us-east-2:...` grabado; en México escribía en S3 con normalidad
+  mientras CloudWatch permanecía vacío. **El documento que está en AWS no es el que está en el
+  repo** hasta que alguien lo aplica, y un componente mudo no es un componente sano.
+- **Las unidades de tiempo de los volcados cambiaron a mitad del histórico**, de milisegundos a
+  microsegundos en 2025, con el mismo formato y sin aviso. Asumir una sola unidad manda la mitad
+  de las velas al año 57000 sin un solo error en pantalla. Se detecta por magnitud, valor por
+  valor.
+- **La cabecera de los CSV depende del mercado**: spot nunca la trae, futuros sí, y con esquemas
+  distintos. El parser la olfatea en vez de asumirla.
+
+---
+
+## Historia: el sistema en R (congelado)
+
+Hasta 2026-09-17 el proyecto era un conjunto de scripts en R que corrían a mano en RStudio, más
+uno productivo por cron en una EC2. Vive en `src/legacy_r/` sin mantenimiento y **hoy no se
+ejecuta**: no hay R instalado en el equipo.
+
+Su arquitectura era: `binancer` pedía las velas a la API, `data.table` y `TTR` calculaban los
+indicadores, el backtest recorría vela a vela y el estado se guardaba en CSV dentro de
+`DataOut/`, que el script productivo leía y reescribía completos. Las credenciales salían de un
+`config.yml` en la raíz y las rutas de local y EC2 se conmutaban comentando líneas.
+
+**Por qué se congeló**, con números medidos y no por preferencia de lenguaje:
+
+- El edge de la estrategia era del mismo orden que su costo: +0.384 % bruto por operación contra
+  0.15 %–0.40 % de round trip, con 4.5 operaciones por par al mes.
+- El modelo de ML tenía tres fugas apiladas que invalidaban sus métricas: split aleatorio sobre
+  serie temporal, etiqueta parcialmente observable al decidir y features de nivel de precio.
+- El universo entero eran pares `*BUSD`, que Binance descontinuó.
+- El backtest ejecutaba al cierre de la vela que generaba la señal, llenaba los stops sin hueco y
+  contabilizaba `cumYield` por par como si cada uno tuviera el 100 % del capital.
+
+Lo único que se rescata es la lógica de órdenes válidas de
+[`src/legacy_r/Tests/binance.R`](../src/legacy_r/Tests/binance.R) —`minNotional`, `stepSize`,
+decimales—, que se porta a `src/services/exchange.py` en vez de redescubrirse.

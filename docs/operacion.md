@@ -99,7 +99,7 @@ data/futures/um/daily/metrics/...            (open interest)
 ```
 
 El histórico llega hasta 2017-08 para BTCUSDT y ETHUSDT. Cada archivo trae su `.CHECKSUM`, que
-debe verificarse al descargar. El módulo de ingesta se implementa en la Fase 1.
+debe verificarse al descargar. El módulo que lo implementa es [`src/data/binance_vision.py`](../src/data/binance_vision.py).
 
 ## AWS
 
@@ -107,7 +107,7 @@ Cuenta configurada con el perfil `algotrading` en `~/.aws/credentials` (región 
 un usuario IAM de mínimo privilegio. **Las llaves de AWS no van en el `.env` del proyecto**: el
 perfil del CLI es la única fuente.
 
-Los documentos de política viven versionados en [`configs/iam/`](../../configs/iam/), con su
+Los documentos de política viven versionados en [`configs/iam/`](../configs/iam/), con su
 propio README que explica qué se adjunta a qué, los comandos de despliegue y por qué dos
 cláusulas concretas (`AdjuntarSoloPoliticaBasica` y `PasarSoloRolesDelProyecto`) son lo que
 impide una escalada de privilegios.
@@ -135,7 +135,7 @@ REGION=mx-central-1 ./configs/deploy-snapshot-lambda.sh
 
 Es idempotente: crea lo que falte y actualiza lo que exista. Empaqueta el módulo en un zip de un
 solo archivo —no hace falta ninguna capa, porque el núcleo es biblioteca estándar y `boto3` ya
-viene en el runtime—, crea la función `algotrading-snapshot` (python3.12, arm64, 256 MB), su
+viene en el runtime—, crea la función `algotrading-snapshot` (python3.12, arm64, 512 MB), su
 grupo de logs con 14 días de retención, y el schedule `algotrading-snapshot-diario` a las
 `cron(10 0 * * ? *)` **en UTC**, que es justo lo que elimina la dependencia de la zona horaria
 local.

@@ -1,98 +1,133 @@
 # Reglas de negocio
 
-Dominio: trading algorítmico de criptomonedas en Binance. Todos los pares son contra **BUSD**
-(ver la nota al final).
+Dominio: trading algorítmico de criptomonedas en Binance. El objetivo declarado es **ganar
+dinero**, no producir un estudio: más de **1 % mensual neto** de comisiones y gastos.
 
-## Términos
+## El presupuesto de costos manda sobre todo lo demás
 
-| Término | Definición |
-|---|---|
-| **Vela / kline** | Registro OHLCV de un intervalo (`1d`, `4h`, `5m`): apertura, máximo, mínimo, cierre, volumen y número de trades. |
-| **Par** | Símbolo negociado, p. ej. `FXSBUSD`. |
-| **Orden** | Operación simulada del backtest, con precio de entrada (`price_0`), de salida (`price_f`), stop loss y resultado. |
-| **Orden activa** | `active == 1`: abierta, todavía sin cerrar por stop loss ni por toma de ganancias. |
-| **Long** | Única dirección implementada: se compra esperando que suba. Las variables `shortStopLoss` se calculan pero no se operan. |
+Round-trip realista en spot USDT, por segmento de liquidez:
 
-## Indicadores
+| Segmento | Fees (pagando con BNB) | Spread | Slippage | **Total ida y vuelta** |
+|---|---|---|---|---|
+| Top 20 por volumen | 0.150 % | 0.01–0.03 % | <0.02 % | **~0.18–0.20 %** |
+| Puestos 20–80 | 0.150 % | 0.05–0.12 % | 0.02–0.05 % | **~0.25–0.35 %** |
+| Cola | 0.150 % | 0.15–0.40 % | 0.05–0.20 % | **~0.40–0.75 %** |
 
-| Indicador | Cálculo | Dónde |
+De ahí sale la regla que decide qué estrategias son siquiera admisibles: si se acepta gastar como
+mucho la mitad del objetivo (0.5 % mensual) en fricción, el sistema se permite **~2.5 round-trips
+al mes por unidad de capital** en pares líquidos. Con cinco posiciones concurrentes eso es un
+**holding medio de ~8 días**.
+
+**La cadencia de decisión es de 4 horas; la de rotación es de días.** Toda estrategia cuyo
+backtest promedie menos de 4 días de holding queda descalificada por presupuesto antes de mirar
+su Sharpe.
+
+## Universo y ejecución
+
+- **Universo de selección ≠ instrumento de ejecución.** El universo se filtra por liquidez,
+  volumen, spread, antigüedad e historia disponible; la ejecución se hace contra USDT.
+- **Quote asset: USDT** (493 pares spot). Se descartó operar contra BNB: solo existen 7 pares, y
+  el descuento del 25 % en comisiones se obtiene **pagando las fees con BNB**, sin necesidad de
+  pares `*BNB`.
+- **Universo point-in-time obligatorio.** Los pares delistados permanecen en el backtest con su
+  desenlace real. Excluirlos *es* el sesgo de supervivencia.
+- **Spot solo-long primero**, perpetuos USDⓈ-M después (ahí entran cortos y, mucho más tarde,
+  apalancamiento).
+- `minNotional` de 5 USDT: una orden por debajo no se toma y se registra como rechazada por
+  capital. Contar esos rechazos es como se descubre el capital mínimo viable.
+
+## Etiquetado: triple barrera
+
+Un evento se etiqueta por lo que ocurre primero entre tres barreras:
+
+- **Superior (TP):** `+k_u · σ_t`
+- **Inferior (SL):** `−k_d · σ_t`
+- **Temporal:** `H` velas de 4 h, con `H ∈ {24, 42, 90}` (4, 7 y 15 días)
+
+`σ_t` es la volatilidad realizada EWM de los retornos de 4 h, de modo que las barreras son
+comparables entre pares y entre regímenes.
+
+**La resolución intrabarra con velas de 1 m no es opcional:** con velas de 4 h no se sabe si se
+tocó antes el máximo o el mínimo. Si ambas barreras caen en el mismo minuto se asume **SL**
+(criterio pesimista) y se reporta la fracción de eventos ambiguos; si supera el 5 %, las barreras
+son demasiado estrechas para esta cadencia.
+
+Cada evento produce además **MFE** (máxima excursión favorable) y **MAE** (máxima adversa), que
+son las que permiten calibrar dónde poner el stop en vez de adivinar un `1.5 · ATR`.
+
+## Indicadores disponibles como features
+
+| Indicador | Cálculo | Por qué sirve |
 |---|---|---|
 | `ohlc4` | `(open + high + low + close) / 4` | Precio típico de la vela. |
 | `ema` | `EMA(ohlc4, 55)` | Tendencia. |
-| `atr` | `ATR(high, low, close, 14)` | Volatilidad; base del stop loss. |
-| `maSlope` | `(180/π) · atan((ema − ema_lag) / atr)` | Pendiente de la EMA **en grados**, normalizada por volatilidad: mide la inclinación de la tendencia de forma comparable entre pares. |
-| Bollinger | `BBands(close)` → `dn`, `up`, `pctB` | La media (`mavg`) se descarta por ser igual a `rollmean20`. |
-| MACD | `MACD(close)` → `macd`, `signal` | `macdChange`: `"down"` si `macd < signal`. |
+| `atr` | `ATR(high, low, close, 14)` | Volatilidad; base del stop. |
+| `maSlope` | `(180/π) · atan((ema − ema_lag) / atr)` | Pendiente de la EMA **en grados**. Ya viene normalizada por volatilidad, así que es comparable entre pares: por eso sobrevive del sistema anterior. |
+| Bollinger | `BBands(close)` → `dn`, `up`, `pctB` | Posición dentro del canal. |
+| MACD | `MACD(close)` → `macd`, `signal` | Momentum. |
 | RSI | `RSI(close, n = 6)` | Se usa 6, no el 14 por defecto, para igualar los gráficos de Binance. |
-| Medias móviles | `frollmean` adaptativo de 5, 10, 20 y 51 periodos | La ventana adaptativa (`an()`) permite calcular las primeras velas sin `NA`. |
+| **Flujo de órdenes** | `taker_buy_quote / quote_volume`, su z-score, CVD proxy, ticket medio | Viene gratis en las propias velas de Binance y casi nadie lo explota: mide el desbalance entre compradores y vendedores agresivos. |
 
-## Estrategia principal: MA Slope + ATR Stop Loss
+**Regla dura de construcción:** nunca niveles de precio crudos como feature. Todo va normalizado
+por volatilidad o convertido a rango percentil dentro del universo en cada `t`. Los niveles no
+son estacionarios y el modelo acaba memorizando el régimen de precios.
 
-Es la única que llegó a productivo. Opera solo en largo, en velas de 4 h.
+## Métricas y umbrales de paso
 
-**Entrada.** Cuando `maSlope >= 3` grados y no había un cruce activo, se abre una orden al
-cierre de esa vela. Se marca el cruce como activo (`maSlopeCross = TRUE`) para no volver a
-abrir en cada vela de la misma tendencia.
+Ninguna estrategia avanza de fase sin cumplirlos **todos**:
 
-**Stop loss.** `longStopLoss = close − 1.5 · atr` en el momento de la entrada. Es estático: no
-se sube conforme avanza el precio. El multiplicador `1.5` es el parámetro `multiplier`.
+| Métrica | Umbral |
+|---|---|
+| Sharpe neto anualizado, walk-forward fuera de muestra | ≥ 1.0 |
+| Sharpe con costos al doble | ≥ 0.5 y retorno > 0 |
+| Deflated Sharpe Ratio | > 0 (o PBO < 0.3) |
+| Retorno mensual mediano neto | ≥ 1.0 % |
+| Meses positivos | ≥ 8 de cada 12 |
+| Máximo drawdown | ≤ 25 % |
+| Operaciones fuera de muestra | ≥ 150 |
+| Correlación con BTC | < 0.6 |
+| Alpha vs BTC | t-stat > 2 |
 
-**Cierre.** Una orden activa se cierra cuando:
-1. El `low` de una vela cae por debajo del stop loss → cierra en `stopLoss`, con
-   `riskRewardRatio = 0`.
-2. La pendiente deja de ser alcista (`maSlope < 3`) **y** el cierre está por encima del precio
-   de entrada → cierra con ganancia al `close` de esa vela.
+**El listón no es cero, es el buy & hold de BTC ajustado por riesgo.** Un sistema que rinde menos
+que mantener BTC, con más trabajo y más riesgo operativo, no descubrió alpha: descubrió una forma
+cara de tener beta.
 
-Si la pendiente se vuelve negativa y el precio está por debajo de la entrada, la orden se queda
-abierta esperando el stop loss o una recuperación.
+---
 
-## Fórmulas de rendimiento
+## Legado: el sistema en R (congelado)
 
-```
-rate             = (price_f − price_0) / price_0
-realRate         = rate · (1 − fee) − 2 · fee        # fee = 0.00075 (0.075 %)
-yield            = 1 + realRate
-cumYield         = cumprod(yield) por símbolo
-riskRewardRatio  = ((close − price_0) / price_0) / ((price_0 − stopLoss) / price_0)
-```
+Las reglas de abajo describen el sistema anterior, que ya no se ejecuta. Se conservan porque la
+estrategia se porta como *baseline* de referencia y porque explican de dónde salen los datos de
+`DataOut/`.
 
-`fee` descuenta dos veces la comisión (compra y venta) más la parte proporcional sobre la
-ganancia. `cumYield` es multiplicativo: el rendimiento acumulado de reinvertir todo el capital
-en cada orden del mismo par.
+**MA Slope + ATR Stop Loss**, solo largo, en velas de 4 h:
 
-`riskRewardRatio` solo se calcula en los cierres con ganancia; en un cierre por stop loss vale
-0 por definición.
-
-## Otras estrategias (backtest, no productivas)
-
-- **BB_RSI_MACD.** El RSI es la señal principal (`RSI <= 30` sobreventa, `>= 70` sobrecompra).
-  Si además el precio toca la banda de Bollinger (`low <= dn` o `high >= up`), la señal se
-  confirma. Mientras el RSI siga en zona extrema se sigue promediando, y el cambio de tendencia
-  se confirma con el cruce del MACD.
-- **SSL y SSL_EMA.** Canal SSL en velas de 5 m; la segunda versión agrega un filtro de EMA para
-  operar solo a favor de la tendencia.
-- **pumNGo.** Detección de subidas bruscas en velas diarias.
-
-## Regla del modelo de ML (`ml_tradingRules.R`)
-
-**Target:** una vela diaria se etiqueta como `1` si el máximo de los **7 días siguientes**
-supera en más de **5 %** el precio de apertura:
+- **Entrada:** `maSlope >= 3` grados sin un cruce ya activo; se abre al cierre de esa vela.
+- **Stop loss:** `close − 1.5 · atr` en el momento de la entrada, estático.
+- **Cierre:** el `low` perfora el stop, o la pendiente deja de ser alcista **y** el cierre está
+  por encima de la entrada.
 
 ```
-high7Days = frollapply(high, n = 7, FUN = max, align = "left")
-increment = (high7Days − open) / open
-target    = increment > 0.05
+rate            = (price_f − price_0) / price_0
+realRate        = rate · (1 − fee) − 2 · fee        # fee = 0.00075
+yield           = 1 + realRate
+cumYield        = cumprod(yield) por símbolo
 ```
 
-El umbral de 5 % se eligió mirando los percentiles de `increment`: alrededor de la mitad de las
-semanas superan ese incremento, lo que deja las clases razonablemente balanceadas.
+**Tres defectos medidos que invalidan sus resultados**, y que el sistema nuevo corrige por
+diseño:
 
-**Métrica:** se optimiza **especificidad**, no exactitud. Importa más evitar falsos positivos
-(entrar en una operación que no sube) que capturar todas las subidas. El punto de corte de la
-probabilidad se elige con el índice de Youden sobre la curva ROC.
+1. `cumYield` acumula por símbolo como si cada par dispusiera del 100 % del capital. No es un
+   retorno de portafolio: con diez pares activos implica diez veces el capital.
+2. El backtest ejecuta al cierre de la misma vela que genera la señal —en la realidad se decide
+   *después* de ver ese cierre— y llena los stops exactamente en el nivel, sin hueco.
+3. El edge medido sobre sus 11,488 órdenes es de +0.384 % bruto por operación con 4.5
+   operaciones por par al mes: del mismo orden que el costo, y negativo a costos de altcoin.
 
-## Nota sobre BUSD
+**El modelo de ML (`ml_tradingRules.R`)** etiquetaba `1` si el máximo de los 7 días siguientes
+superaba en 5 % la apertura. Tenía tres fugas apiladas: split aleatorio sobre serie temporal,
+ventana de etiqueta que incluía la vela actual (parcialmente observable al decidir) y features de
+nivel de precio crudo. Sus métricas están infladas y no deben citarse.
 
-Binance descontinuó BUSD entre 2023 y 2024. Los pares `*BUSD` que usan todos los scripts ya no
-reciben datos nuevos, así que cualquier corrida actual devuelve series vacías o congeladas.
-Migrar a USDT o USDC está registrado en [`pendientes.md`](pendientes.md).
+**BUSD.** Todo el universo del sistema anterior eran pares `*BUSD`, que Binance descontinuó entre
+2023 y 2024. Por eso `DataOut/` sirve solo como fixture de regresión, no como fuente de datos.
