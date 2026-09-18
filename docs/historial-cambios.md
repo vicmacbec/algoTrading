@@ -3,6 +3,14 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [fe83233] 2026-09-18
+Revisión completa de `docs/`: los cinco documentos seguían describiendo el proyecto en R como si
+fuera el sistema actual —el diagrama de componentes con `binancer`, `config.yml` y el cron de la
+EC2, y las reglas de negocio abriendo con que todos los pares son contra BUSD—. Ahora cada uno
+describe lo que existe hoy y el legado queda en secciones marcadas como historia. De paso se
+corrigieron contradicciones reales (256 frente a 512 MB), un enlace roto y siete pendientes que
+ya estaban hechos u obsoletos.
+
 ## [adf49a9] 2026-09-17
 Arranca la Fase 1 con el ingestor de los volcados históricos de `data.binance.vision`: listado
 paginado del bucket, descarga verificada por SHA-256 y normalización de velas. Inspeccionando
