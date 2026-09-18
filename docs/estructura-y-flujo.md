@@ -55,7 +55,8 @@ de costos no admite operar cada vela (ver [`reglas-negocio.md`](reglas-negocio.m
 
 | Archivo | Uso | Frecuencia |
 |---|---|---|
-| [`src/data/snapshot_universe.py`](../src/data/snapshot_universe.py) | Captura diaria de `exchangeInfo` y `ticker/24hr` de spot y perpetuos. **Solo biblioteca estándar**, a propósito: debe correr aunque el entorno falle. Es el único dato irrecuperable hacia atrás. | Cron 09:05 y 21:05 local |
+| [`src/data/snapshot_universe.py`](../src/data/snapshot_universe.py) | Captura diaria de `exchangeInfo` y `ticker/24hr` de spot y perpetuos. **Solo biblioteca estándar**, a propósito: debe correr aunque el entorno falle. Es el único dato irrecuperable hacia atrás. | Lambda diaria en `mx-central-1` (00:10 UTC) + cron local de respaldo |
+| [`src/data/binance_vision.py`](../src/data/binance_vision.py) | Acceso a los volcados históricos: listado paginado del bucket, descarga con verificación de SHA-256 y normalización de las velas. Resuelve dos trampas que corrompen el panel en silencio: el cambio de milisegundos a microsegundos a mitad del histórico y la cabecera que solo traen los futuros. | Backfill inicial y actualización incremental |
 | [`pyproject.toml`](../pyproject.toml) | Dependencias fijadas; `uv.lock` es la fuente de verdad exacta | Al cambiar dependencias |
 | [`.env.example`](../.env.example) | Plantilla de credenciales; el archivo real vive fuera del repo | Referencia |
 
