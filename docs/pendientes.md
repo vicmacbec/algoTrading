@@ -31,9 +31,19 @@
       proyecto. Se empieza acotado al top 30 por volumen para llegar a las baselines en días en
       vez de semanas; escalar después es cambiar una lista.
 
-- [ ] Reconstruir el universo point-in-time
-      Por qué falta: la señal existe —el primer y el último mes con archivo en el bucket marcan
-      el listado y el delisting de cada par— pero falta cruzarla con los snapshots diarios y
-      dejarla como tabla consultable.
-      Por qué debe hacerse: sin ella cualquier backtest tiene sesgo de supervivencia, porque el
-      universo se elegiría con los pares que siguen vivos hoy.
+- [ ] Construir y persistir el catálogo completo del universo
+      Por qué falta: la lógica ya está en `src/data/universe.py` y validada contra los 3705
+      símbolos de un snapshot real, pero el catálogo en sí no existe todavía: enumerar los meses
+      publicados de cada par exige una petición de listado por símbolo, unas 3700 en total.
+      Por qué debe hacerse: es la tabla que responde "qué pares eran operables el 14 de marzo de
+      2021", y sin ella cualquier backtest elige su universo con los pares que siguen vivos hoy.
+      Conviene construirlo con caché y reanudación, y persistirlo en Parquet para no repetir el
+      recorrido.
+
+- [ ] Resolver o documentar las 3 ambigüedades de nombre que quedan
+      Por qué falta: `LUNAEUR`, `GALAEUR` y `ARBIDR` admiten dos particiones válidas cada una
+      (`LUNA`+`EUR` y `LUN`+`AEUR`, ambas con activos que existen), así que ninguna regla basada
+      en el nombre las resuelve. Hoy la heurística falla en 3 de 3705 (0.08 %).
+      Por qué debe hacerse: no urge —el mapa autoritativo del snapshot las cubre todas—, pero si
+      algún día aparece un par delistado con esta forma y sin snapshot, se partirá mal en
+      silencio. Bastaría una lista de excepciones explícitas.
