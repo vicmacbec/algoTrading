@@ -146,6 +146,48 @@ Para seguir una corrida:
 aws logs tail /aws/lambda/algotrading-snapshot --follow --profile algotrading --region mx-central-1
 ```
 
+### Cómo verificar que de verdad está capturando
+
+Dos comprobaciones que parecen redundantes y no lo son:
+
+**1. Una invocación exitosa no prueba que haya trabajado.** El script es idempotente: si los
+objetos del día ya existen, los omite y devuelve 200 sin llamar a Binance ni escribir nada. Para
+ejercer el camino completo hay que forzarlo:
+
+```bash
+aws lambda invoke --function-name algotrading-snapshot --payload '{"force":true}' \
+  --cli-binary-format raw-in-base64-out --cli-read-timeout 150 /tmp/out.json \
+  --profile algotrading --region mx-central-1 && cat /tmp/out.json
+```
+
+La respuesta debe traer los cuatro endpoints en `escritos` y `fallos` vacío. Si aparecen en
+`omitidos`, no se probó nada.
+
+**2. Si hay objetos en S3 pero CloudWatch está vacío, el rol no puede loguear.** Lambda **no
+falla** cuando no tiene permiso de escribir sus logs: se queda mudo. Revisa que el ARN del rol
+no fije una región distinta a la del despliegue:
+
+```bash
+aws iam get-role-policy --role-name algotrading-snapshot-exec --policy-name snapshot-runtime \
+  --query 'PolicyDocument.Statement[].Resource' --profile algotrading
+```
+
+Debe decir `arn:aws:logs:*:...`, no una región concreta.
+
+**Memoria.** La función corre con 512 MB y usa ~200 MB; el pico ocurre al parsear
+`exchangeInfo`, que son ~17 MB crudos. Con los 256 MB iniciales llegaba al 93 % de ocupación,
+demasiado cerca del OOM. Vigila la línea `REPORT ... Max Memory Used` si Binance agranda el
+payload.
+
+**Huecos en S3:**
+
+```bash
+aws s3api list-objects-v2 --bucket algotrading-vicmacbec-data --prefix snapshots/ \
+  --query 'Contents[?contains(Key,`_ok`)].Key' --profile algotrading
+```
+
+Cada día capturado completo tiene su marca `_ok`. Un día sin ella quedó incompleto.
+
 ### Producción (pendiente, Fase 6-7)
 
 El diseño aprobado es **Lambda arm64 + EventBridge Scheduler** cada 4 horas (dentro del free

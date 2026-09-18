@@ -110,3 +110,22 @@ Consecuencias:
 La lección general para lo que viene: **cualquier componente que hable con Binance debe vivir
 fuera de EE.UU.**, y eso incluye la ejecución de órdenes cuando llegue. Verificar la
 alcanzabilidad con la sonda antes de desplegar en una región nueva.
+
+**Resultado de la migración (2026-09-18).** La sonda en `mx-central-1` devolvió 200 en los
+cuatro hosts, futuros incluidos. Ahí quedan la función `algotrading-snapshot` (python3.12,
+arm64, 512 MB, 120 s) y el schedule `algotrading-snapshot-diario` con `cron(10 0 * * ? *)` en
+UTC; `us-east-2` se desmanteló por completo. El bucket permanece en `us-east-2` y la escritura
+entre regiones funciona sin fricción. Una corrida real tarda ~7 s y usa 200 MB.
+
+Dos trampas que costaron tiempo y conviene no repetir:
+
+- **Una invocación exitosa no prueba nada si el trabajo se omitió.** Las dos primeras pruebas
+  devolvieron 200 porque los objetos del día ya existían y el script es idempotente: nunca
+  llegaron a llamar a Binance ni a escribir. El camino de escritura solo queda demostrado
+  forzando la corrida (`{"force": true}`).
+- **Lambda no falla cuando no puede escribir sus logs, simplemente se calla.** El rol de
+  ejecución se creó con una versión previa de la política que fijaba
+  `arn:aws:logs:us-east-2:...`; en `mx-central-1` la función escribía en S3 con normalidad
+  mientras CloudWatch permanecía vacío. Al corregir el ARN a `arn:aws:logs:*:...` aparecieron
+  los logs. Moraleja: **el documento que está en AWS no es el que está en el repo** hasta que
+  alguien lo aplica, y un componente mudo no es un componente sano.

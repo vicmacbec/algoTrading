@@ -1,21 +1,5 @@
 # Pendientes
 
-- [ ] Ampliar `AlgoTradingPolicy` para que no fije la región **(bloquea la migración)**
-      Por qué falta: la política adjunta al usuario `algoTrading` todavía ancla los ARNs de
-      Lambda, Logs y Scheduler a `us-east-2`, así que crear la función en `mx-central-1` se
-      deniega. El archivo del repo ya está corregido con `arn:aws:lambda:*:...:algotrading-*`.
-      Por qué debe hacerse: es el único paso que impide migrar la captura fuera de EE.UU., y
-      solo se puede hacer desde la consola de IAM: el usuario no tiene permisos sobre políticas.
-
-- [ ] Migrar el snapshot a `mx-central-1` y desmantelar `us-east-2`
-      Por qué falta: depende del punto anterior. La función de `us-east-2` quedó creada pero es
-      inútil (Binance responde 451 desde EE.UU.) y su schedule ya se eliminó para que no falle
-      a diario.
-      Por qué debe hacerse: mientras tanto la única captura activa es el cron local, que depende
-      de que la laptop esté encendida. Pasos: correr `configs/probe-binance-region.sh
-      mx-central-1`, luego `REGION=mx-central-1 ./configs/deploy-snapshot-lambda.sh`, y al final
-      borrar la función de `us-east-2`.
-
 - [ ] Apagar el cron local tras dos semanas de traslape con la Lambda
       Por qué falta: el snapshot es el único dato irrecuperable del proyecto; conviene tener dos
       fuentes hasta comprobar que la nube no falla.

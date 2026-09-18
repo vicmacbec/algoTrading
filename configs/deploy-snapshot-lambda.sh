@@ -50,7 +50,7 @@ if aws lambda get-function --function-name "$FUNCION" >/dev/null 2>&1; then
     aws lambda update-function-code --function-name "$FUNCION" --zip-file "fileb://$ZIP" >/dev/null
     aws lambda wait function-updated --function-name "$FUNCION"
     aws lambda update-function-configuration --function-name "$FUNCION" \
-        --timeout 120 --memory-size 256 --environment "$ENV_VARS" >/dev/null
+        --timeout 120 --memory-size 512 --environment "$ENV_VARS" >/dev/null
     aws lambda wait function-updated --function-name "$FUNCION"
     echo "    actualizada"
 else
@@ -60,7 +60,7 @@ else
             --runtime python3.12 --architectures arm64 \
             --role "arn:aws:iam::$CUENTA:role/$ROL_EXEC" \
             --handler snapshot_universe.lambda_handler \
-            --zip-file "fileb://$ZIP" --timeout 120 --memory-size 256 \
+            --zip-file "fileb://$ZIP" --timeout 120 --memory-size 512 \
             --environment "$ENV_VARS" \
             --description "Snapshot point-in-time del universo de Binance" >/dev/null 2>&1; then
             echo "    creada"; break
@@ -71,7 +71,7 @@ else
                 --runtime python3.12 --architectures arm64 \
                 --role "arn:aws:iam::$CUENTA:role/$ROL_EXEC" \
                 --handler snapshot_universe.lambda_handler \
-                --zip-file "fileb://$ZIP" --timeout 120 --memory-size 256 \
+                --zip-file "fileb://$ZIP" --timeout 120 --memory-size 512 \
                 --environment "$ENV_VARS" || true
             exit 1
         fi
