@@ -3,6 +3,14 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [adf49a9] 2026-09-17
+Arranca la Fase 1 con el ingestor de los volcados históricos de `data.binance.vision`: listado
+paginado del bucket, descarga verificada por SHA-256 y normalización de velas. Inspeccionando
+archivos reales aparecieron dos trampas que corrompen el panel en silencio —las unidades de
+tiempo pasaron de milisegundos a microsegundos a mitad del histórico, y la cabecera solo la
+traen los futuros—, así que ambas se detectan en vez de asumirse. Esta vía es la que permite un
+universo point-in-time: los pares delistados conservan su histórico, que la API ya no devuelve.
+
 ## [d823e36] 2026-09-17
 La captura del universo pasa a `mx-central-1` y `us-east-2` se desmantela — desde México los
 cuatro hosts de Binance responden 200, futuros incluidos. Al verificar aparecieron dos fallos
