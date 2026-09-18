@@ -79,3 +79,34 @@ Consecuencias inmediatas:
   `pyproject.toml`.
 - **Las credenciales salen del repo y de Google Drive** a `~/.config/algotrading/.env`. Ver
   `docs/operacion.md`.
+
+**Binance bloquea las IPs de Estados Unidos: la región de AWS es una decisión de arquitectura,
+no de latencia (2026-09-18).** Al desplegar la Lambda del snapshot en `us-east-2` (Ohio), los
+cuatro endpoints devolvieron **HTTP 451 "Unavailable For Legal Reasons"**. Se comprobó con una
+Lambda sonda desechable (`configs/probe-binance-region.sh`) desde esa región:
+
+| Host | Desde us-east-2 |
+|---|---|
+| `api.binance.com`, `api1`, `api-gcp` (spot) | 451 bloqueado |
+| `fapi.binance.com` (futuros) | 451 bloqueado |
+| `data-api.binance.vision` (spot público) | 200 OK |
+| `data.binance.vision` (dumps históricos) | 200 OK |
+
+Consecuencias:
+
+- **La ingesta histórica no está en riesgo**: los dumps de `data.binance.vision` sí se descargan
+  desde EE.UU., así que la Fase 1 puede correr en cualquier región.
+- **El spot en vivo tiene alternativa**: `data-api.binance.vision` devuelve exactamente el mismo
+  `exchangeInfo` (3705 símbolos, mismos campos), verificado contra el original.
+- **Los futuros no la tienen**: `data-api.binance.vision` no sirve `/fapi` (404). Sin funding
+  rate ni open interest desde EE.UU. no hay features de régimen, que el plan sí contempla.
+- Por eso el cómputo se mueve a **`mx-central-1`**, fuera de la jurisdicción bloqueada y en la
+  misma que el operador. El bucket permanece en `us-east-2`: la escritura entre regiones
+  funciona y 0.26 GB al año de transferencia cuesta centavos, así que no justifica moverlo.
+- Los roles de IAM son globales y se reutilizan tal cual; las políticas dejaron de fijar la
+  región en sus ARNs (`arn:aws:lambda:*:...:function:algotrading-*`) y siguen acotadas por el
+  prefijo del nombre.
+
+La lección general para lo que viene: **cualquier componente que hable con Binance debe vivir
+fuera de EE.UU.**, y eso incluye la ejecución de órdenes cuando llegue. Verificar la
+alcanzabilidad con la sonda antes de desplegar en una región nueva.

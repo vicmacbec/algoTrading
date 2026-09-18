@@ -47,7 +47,7 @@
         "lambda:TagResource",
         "lambda:DeleteFunction"
       ],
-      "Resource": "arn:aws:lambda:us-east-2:<ACCOUNT_ID>:function:algotrading-*"
+      "Resource": "arn:aws:lambda:*:<ACCOUNT_ID>:function:algotrading-*"
     },
     {
       "Sid": "LambdaAccionesSinRecurso",
@@ -104,7 +104,7 @@
         "scheduler:DeleteSchedule",
         "scheduler:TagResource"
       ],
-      "Resource": "arn:aws:scheduler:us-east-2:<ACCOUNT_ID>:schedule/default/algotrading-*"
+      "Resource": "arn:aws:scheduler:*:<ACCOUNT_ID>:schedule/default/algotrading-*"
     },
     {
       "Sid": "SchedulerAccionesSinRecurso",
@@ -123,7 +123,7 @@
         "logs:FilterLogEvents",
         "logs:DeleteLogGroup"
       ],
-      "Resource": "arn:aws:logs:us-east-2:<ACCOUNT_ID>:log-group:/aws/lambda/algotrading-*"
+      "Resource": "arn:aws:logs:*:<ACCOUNT_ID>:log-group:/aws/lambda/algotrading-*"
     },
     {
       "Sid": "LogsAccionesSinRecurso",

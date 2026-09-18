@@ -115,12 +115,41 @@ impide una escalada de privilegios.
 Bucket del proyecto: `algotrading-vicmacbec-data` en `us-east-2`, con los snapshots bajo el
 prefijo `snapshots/`.
 
+### La región importa: Binance bloquea Estados Unidos
+
+Cualquier componente que hable con la API de Binance **debe correr fuera de EE.UU.**: desde
+`us-east-2` todos los endpoints devuelven HTTP 451. Los detalles y la evidencia están en
+[`arquitectura.md`](arquitectura.md). Antes de desplegar en una región nueva, compruébalo:
+
+```bash
+./configs/probe-binance-region.sh mx-central-1
+```
+
+Levanta una Lambda desechable, prueba los hosts que el proyecto necesita y se borra sola.
+
+### Desplegar el snapshot en la nube
+
+```bash
+REGION=mx-central-1 ./configs/deploy-snapshot-lambda.sh
+```
+
+Es idempotente: crea lo que falte y actualiza lo que exista. Empaqueta el módulo en un zip de un
+solo archivo —no hace falta ninguna capa, porque el núcleo es biblioteca estándar y `boto3` ya
+viene en el runtime—, crea la función `algotrading-snapshot` (python3.12, arm64, 256 MB), su
+grupo de logs con 14 días de retención, y el schedule `algotrading-snapshot-diario` a las
+`cron(10 0 * * ? *)` **en UTC**, que es justo lo que elimina la dependencia de la zona horaria
+local.
+
+Para seguir una corrida:
+
+```bash
+aws logs tail /aws/lambda/algotrading-snapshot --follow --profile algotrading --region mx-central-1
+```
+
 ### Producción (pendiente, Fase 6-7)
 
 El diseño aprobado es **Lambda arm64 + EventBridge Scheduler** cada 4 horas (dentro del free
 tier), con S3 para datos y Secrets Manager para credenciales: del orden de 1.5 a 5 USD al mes.
-El snapshot diario se migra ahí primero, porque EventBridge programa en UTC y elimina la
-dependencia de que la laptop esté encendida.
 
 Queda **descartado** el estimado de `AWS/My_AWS_Estimate.csv` (t4g.2xlarge + 1 TB de S3 =
 55.59 USD/mes): cuesta más que el capital que se va a operar. Lo que permite prescindir de una

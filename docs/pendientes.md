@@ -1,13 +1,34 @@
 # Pendientes
 
-- [ ] Rotar las cuatro credenciales y sacarlas de Google Drive
-      Por qué falta: `config.yml` (llaves de Binance y de AWS) y `Credentials/` viven en texto
-      plano dentro de `~/Drive`, que Google sincroniza a la nube y donde conserva historial de
-      versiones. Nunca se commitearon, pero están expuestas fuera del equipo.
-      Por qué debe hacerse: las llaves de Binance permiten operar con dinero real, y el proyecto
-      va a habilitar permisos de trading. La plantilla y el destino ya existen
-      (`.env.example` → `~/.config/algotrading/.env`); falta la rotación, que es manual en las
-      consolas de Binance, AWS y GitHub, y purgar el historial de versiones en Drive.
+- [ ] Ampliar `AlgoTradingPolicy` para que no fije la región **(bloquea la migración)**
+      Por qué falta: la política adjunta al usuario `algoTrading` todavía ancla los ARNs de
+      Lambda, Logs y Scheduler a `us-east-2`, así que crear la función en `mx-central-1` se
+      deniega. El archivo del repo ya está corregido con `arn:aws:lambda:*:...:algotrading-*`.
+      Por qué debe hacerse: es el único paso que impide migrar la captura fuera de EE.UU., y
+      solo se puede hacer desde la consola de IAM: el usuario no tiene permisos sobre políticas.
+
+- [ ] Migrar el snapshot a `mx-central-1` y desmantelar `us-east-2`
+      Por qué falta: depende del punto anterior. La función de `us-east-2` quedó creada pero es
+      inútil (Binance responde 451 desde EE.UU.) y su schedule ya se eliminó para que no falle
+      a diario.
+      Por qué debe hacerse: mientras tanto la única captura activa es el cron local, que depende
+      de que la laptop esté encendida. Pasos: correr `configs/probe-binance-region.sh
+      mx-central-1`, luego `REGION=mx-central-1 ./configs/deploy-snapshot-lambda.sh`, y al final
+      borrar la función de `us-east-2`.
+
+- [ ] Apagar el cron local tras dos semanas de traslape con la Lambda
+      Por qué falta: el snapshot es el único dato irrecuperable del proyecto; conviene tener dos
+      fuentes hasta comprobar que la nube no falla.
+      Por qué debe hacerse: mantener dos capturas indefinidamente duplica el punto de fallo
+      humano (olvidar cuál es la buena) sin aportar nada una vez validada la Lambda.
+
+- [ ] Borrar de Google Drive los archivos de credenciales viejos
+      Por qué falta: las llaves nuevas ya viven en `~/.config/algotrading/.env` y están
+      verificadas, pero `config.yml` y `Credentials/` siguen en `~/Drive`, que Google sincroniza
+      y donde conserva historial de versiones.
+      Por qué debe hacerse: son llaves rotadas, pero el hábito importa: mientras estén ahí,
+      cualquier llave futura acabará en el mismo sitio. Hay que borrarlas **y** purgar el
+      historial de versiones en Drive, no solo el archivo.
 
 - [ ] Apagar el cron de la EC2 y decidir el destino de la instancia
       Por qué falta: la instancia (`~/algoTrading/`) sigue con un crontab que apunta a rutas

@@ -11,7 +11,7 @@
       "Sid": "Logs",
       "Effect": "Allow",
       "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-      "Resource": "arn:aws:logs:us-east-2:<ACCOUNT_ID>:log-group:/aws/lambda/algotrading-snapshot:*"
+      "Resource": "arn:aws:logs:*:<ACCOUNT_ID>:log-group:/aws/lambda/algotrading-snapshot:*"
     }
   ]
 }
