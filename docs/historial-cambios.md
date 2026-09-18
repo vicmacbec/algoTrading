@@ -3,6 +3,14 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [b50df3c] 2026-09-17
+El snapshot gana destino S3 y `lambda_handler`, y se descubre que **Binance responde HTTP 451 a
+las IPs de Estados Unidos**: la función desplegada en `us-east-2` no pudo descargar ni un
+endpoint. Una sonda desde esa región confirmó que los dumps históricos y el spot público sí son
+alcanzables, pero los futuros no, así que el cómputo se mueve a `mx-central-1`. Se añaden el
+script de despliegue idempotente y el de sondeo de región, y las políticas dejan de fijar la
+región en sus ARNs.
+
 ## [d0acf6e] 2026-09-17
 Arranca el sistema cuantitativo en Python (entorno con uv sobre 3.12, captura diaria del
 universo point-in-time por cron, primera suite de pruebas) y se archiva el código R en
