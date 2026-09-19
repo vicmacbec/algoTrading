@@ -112,6 +112,30 @@ el schedule `algotrading-snapshot-diario` con `cron(10 0 * * ? *)` en UTC. Una c
 - **La cabecera de los CSV depende del mercado**: spot nunca la trae, futuros sí, y con esquemas
   distintos. El parser la olfatea en vez de asumirla.
 
+**La Lambda desplegada el 18 nunca corrió sola (2026-09-19).** El schedule estaba `ENABLED` y
+aun así no hubo ni una ejecución programada. Dos fallos encadenados, ambos silenciosos:
+
+- **El rol del scheduler conservaba la región vieja.** Se creó con la política original, que
+  solo permitía invocar `arn:aws:lambda:us-east-2:...`; al migrar a `mx-central-1` se corrigió el
+  rol de ejecución pero no este. Cada disparo fallaba al invocar, **sin dejar rastro en los logs
+  de la Lambda**, porque la Lambda nunca llegaba a ejecutarse. Es la misma trampa de arriba —el
+  documento de AWS no es el del repo—, repetida con el otro rol.
+- **S3 responde 403 y no 404 cuando falta `s3:ListBucket`.** Para no revelar qué claves existen,
+  `HeadObject` sobre un objeto ausente devuelve `Forbidden` si el llamante no puede listar el
+  bucket. La comprobación de idempotencia lo interpretaba como fallo, así que **toda corrida
+  normal sobre un día nuevo habría fallado**, aun con el scheduler arreglado.
+
+La lección de fondo no es de IAM sino de verificación: las pruebas del 18 invocaron la función
+directamente con credenciales de administrador, forzaron la descarga o corrieron sobre objetos ya
+existentes. Ninguna ejercitó el camino real —**scheduler → corrida no forzada → día que todavía
+no existe**—, que es justo el único que ocurre en producción. Desde entonces la verificación de
+cualquier despliegue es un disparo programado de un solo uso por el camino real; ver
+[`operacion.md`](operacion.md).
+
+No se perdió ningún día del calendario: el 18 lo capturó una invocación manual y el 19 el
+respaldo local. La laptop estuvo apagada 34 horas justo en ese intervalo, que es exactamente el
+escenario para el que existe la Lambda.
+
 ---
 
 ## Historia: el sistema en R (congelado)

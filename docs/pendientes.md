@@ -40,6 +40,14 @@
       Conviene construirlo con caché y reanudación, y persistirlo en Parquet para no repetir el
       recorrido.
 
+- [ ] Que el despliegue aplique las políticas de los roles desde el repo
+      Por qué falta: `configs/deploy-snapshot-lambda.sh` crea la función y el schedule, pero las
+      políticas de los dos roles se aplicaron a mano, una vez, al crearlos.
+      Por qué debe hacerse: es la causa raíz de dos fallos silenciosos seguidos —logs mudos el 18 y
+      ninguna corrida programada el 19—, ambos porque el documento de AWS se quedó atrás del repo.
+      Si cada despliegue hiciera `put-role-policy` desde `configs/iam/`, esa deriva no podría
+      volver a ocurrir.
+
 - [ ] Registrar cada bloque de features con su hipótesis y contarlo para el DSR
       Por qué falta: los indicadores ya existen en `src/features/`, pero el contador de
       configuraciones probadas vive en el tracker, que es de la Fase 3 y todavía no existe.

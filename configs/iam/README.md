@@ -43,6 +43,15 @@ contra la API:
 2. **Faltaban las acciones `s3:Get*` de configuración** (`GetEncryptionConfiguration`,
    `GetBucketVersioning`, `GetBucketPublicAccessBlock`). Solo estaban las `Put*`, así que se
    podía configurar el bucket pero no auditarlo: cualquier verificación devolvía `AccessDenied`.
+3. **El rol de ejecución necesita `s3:ListBucket`, aunque nunca liste nada.** Sin ese permiso, S3
+   responde `403 Forbidden` —y no `404`— a un `HeadObject` sobre un objeto que no existe, para no
+   revelar qué claves hay en el bucket. La comprobación de idempotencia tomaba ese 403 por fallo,
+   así que toda corrida normal sobre un día nuevo fallaba. Va **sin condición de prefijo**: la
+   petición `HeadObject` no lleva la clave `s3:prefix` en su contexto, así que una concesión
+   condicionada no aplicaría.
+4. **El rol del scheduler conservaba la región vieja** en su ARN tras migrar a `mx-central-1`: el
+   archivo del repo se corrigió, pero en AWS seguía la versión original. Se aplicó con
+   `put-role-policy` desde el archivo del repo.
 
 La lección general: una política de mínimo privilegio no está terminada hasta que se ejercita
 contra la API real. Probar solo las acciones de escritura deja ciegas las de lectura.

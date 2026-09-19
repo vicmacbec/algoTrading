@@ -8,6 +8,12 @@
       "Resource": "arn:aws:s3:::algotrading-vicmacbec-data/snapshots/*"
     },
     {
+      "Sid": "DistinguirObjetoAusenteDePermisoDenegado",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::algotrading-vicmacbec-data"
+    },
+    {
       "Sid": "Logs",
       "Effect": "Allow",
       "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],

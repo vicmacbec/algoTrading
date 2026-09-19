@@ -148,7 +148,24 @@ aws logs tail /aws/lambda/algotrading-snapshot --follow --profile algotrading --
 
 ### Cómo verificar que de verdad está capturando
 
-Dos comprobaciones que parecen redundantes y no lo son:
+**La única prueba que cuenta es un disparo real del scheduler.** Invocar la función a mano con tus
+credenciales se salta el rol del scheduler, y forzar la corrida se salta la comprobación de
+idempotencia: justo los dos puntos que fallaron el 19 de septiembre. Tras cualquier despliegue,
+programa un disparo de un solo uso que recorra el camino de producción y se borre al terminar:
+
+```bash
+CUANDO=$(date -u -d '+3 minutes' '+%Y-%m-%dT%H:%M:00')
+aws scheduler create-schedule --region mx-central-1 --name algotrading-snapshot-prueba \
+  --schedule-expression "at($CUANDO)" --schedule-expression-timezone UTC \
+  --flexible-time-window Mode=OFF --action-after-completion DELETE \
+  --target '{"Arn":"arn:aws:lambda:mx-central-1:<ACCOUNT_ID>:function:algotrading-snapshot","RoleArn":"arn:aws:iam::<ACCOUNT_ID>:role/algotrading-scheduler-invoke","RetryPolicy":{"MaximumRetryAttempts":0}}' \
+  --profile algotrading
+```
+
+Para que la prueba valga, el día de hoy **no debe existir todavía en S3**: es el caso de cada corrida
+diaria real. Si ya existe, la función solo verificará que existe y no demostrará nada.
+
+Dos comprobaciones complementarias que parecen redundantes y no lo son:
 
 **1. Una invocación exitosa no prueba que haya trabajado.** El script es idempotente: si los
 objetos del día ya existen, los omite y devuelve 200 sin llamar a Binance ni escribir nada. Para
