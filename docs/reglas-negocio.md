@@ -72,6 +72,59 @@ son las que permiten calibrar dónde poner el stop en vez de adivinar un `1.5 ·
 por volatilidad o convertido a rango percentil dentro del universo en cada `t`. Los niveles no
 son estacionarios y el modelo acaba memorizando el régimen de precios.
 
+### TTR como catálogo de definiciones, no como código
+
+El paquete de R `TTR` es la referencia de las fórmulas: están probadas por años de uso y su
+fuente es pública. Lo que se toma son sus **definiciones y convenciones**, verificadas contra su
+código en C; no se porta su catálogo completo.
+
+**Por qué no el catálogo completo.** Pasar de 10 a 60 indicadores no multiplica el alpha,
+multiplica el espacio de búsqueda, que es exactamente lo que castiga el Deflated Sharpe. Y están
+mucho más correlacionados de lo que parece: RSI, CMO, estocástico y Williams %R son el mismo
+oscilador de momentum sobre la misma serie de cierres; SMA, EMA, DEMA y ZLEMA solo difieren en
+cómo ponderan el rezago. Cuatro nombres, una señal.
+
+**Lo implementado** (`src/features/`), por aportar información distinta:
+
+| Bloque | Qué es | Por qué entra |
+|---|---|---|
+| Volatilidad con OHLC | Parkinson, Garman-Klass, Rogers-Satchell, GK-YZ, Yang-Zhang, y la clásica de cierres | Usan máximo y mínimo: con la misma ventana estiman con menos error que la de cierres |
+| ATR y ADX/DI | Rango verdadero suavizado; índice direccional de Wilder | La fuerza de una tendencia es distinta de su dirección |
+| MFI, CMF, OBV | Volumen firmado por heurística | Solo como referencia: el flujo de `taker_buy` mide lo mismo con datos del exchange |
+| Utilidades rodantes | Percent rank, MAD, correlación, EMA y suma de Wilder | Son la plomería de la normalización cross-seccional |
+
+**Convenciones heredadas de TTR, porque de ellas depende no mirar al futuro:**
+
+- Un valor solo existe cuando su ventana está completa; antes, NaN. Rellenar hacia atrás
+  inyectaría velas posteriores en las primeras filas de cada serie.
+- La EMA se siembra con la **media simple** de las primeras `n`, no con el primer valor. Por eso
+  `ewm_mean` de Polars no sirve: da otra serie.
+- El rango verdadero vale NaN en la primera vela (no hay cierre previo), así que el ATR empieza en
+  la posición `n` y el ADX en `2n-1`.
+- La varianza rodante es muestral (denominador `n-1`).
+- NaN al inicio se toleran; NaN en medio son un problema de datos y producen error.
+
+**Anualización.** TTR anualiza con `N=260`, los días hábiles de las acciones. Cripto opera 24/7:
+365 velas diarias o 2190 de 4 horas al año. Para el modelo la escala da igual —es una constante—,
+pero para leer el número importa.
+
+**Prohibido: `ZigZag`.** Reubica sus pivotes con precios posteriores, así que mira al futuro por
+construcción. No da error: da un backtest espectacular que muere en vivo.
+
+**Desviación documentada de TTR.** En un tramo sin ningún movimiento direccional, TTR calcula
+`0/0` en el ADX y ese NaN se propaga por la EMA hasta el final de la serie. Aquí vale 0 —"no hay
+tendencia"—, que es su significado económico. Con precios normales el resultado es idéntico.
+
+**Regla de proceso: los features entran por bloques con hipótesis previa.** Cada bloque se
+declara antes de probarlo —"el flujo agresivo predice continuación a 4 h"— y cuenta como una
+configuración más en el contador del Deflated Sharpe. Nada de volcar el catálogo y dejar que el
+modelo elija: esa es la forma más rápida de fabricar un backtest que no sobrevive.
+
+La observación de fondo: el alpha marginal no está en otra transformación del mismo precio de
+cierre, sino en **datos distintos** —flujo de órdenes, rango cross-seccional contra el universo,
+funding y open interest, régimen de mercado—. Una fuente nueva vale más que veinte
+transformaciones de la misma serie.
+
 ## Métricas y umbrales de paso
 
 Ninguna estrategia avanza de fase sin cumplirlos **todos**:

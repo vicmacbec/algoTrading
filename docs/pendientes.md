@@ -40,6 +40,13 @@
       Conviene construirlo con caché y reanudación, y persistirlo en Parquet para no repetir el
       recorrido.
 
+- [ ] Registrar cada bloque de features con su hipótesis y contarlo para el DSR
+      Por qué falta: los indicadores ya existen en `src/features/`, pero el contador de
+      configuraciones probadas vive en el tracker, que es de la Fase 3 y todavía no existe.
+      Por qué debe hacerse: la regla de añadir features por bloques con hipótesis previa solo
+      protege contra el sobreajuste si cada bloque se cuenta. Sin el registro, la tentación de
+      probar "solo uno más" no deja rastro y el Deflated Sharpe se calcula con un número falso.
+
 - [ ] Resolver o documentar las 3 ambigüedades de nombre que quedan
       Por qué falta: `LUNAEUR`, `GALAEUR` y `ARBIDR` admiten dos particiones válidas cada una
       (`LUNA`+`EUR` y `LUN`+`AEUR`, ambas con activos que existen), así que ninguna regla basada
