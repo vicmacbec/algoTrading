@@ -2,7 +2,9 @@
 
 - [ ] Apagar el cron local tras dos semanas de traslape con la Lambda
       Por qué falta: el snapshot es el único dato irrecuperable del proyecto; conviene tener dos
-      fuentes hasta comprobar que la nube no falla. La Lambda arrancó el 2026-09-18.
+      fuentes hasta comprobar que la nube no falla. La primera corrida programada que funcionó
+      fue la del 2026-09-19 (la del 18 nunca corrió sola), así que el traslape cuenta desde ahí:
+      hasta el 2026-10-03 como mínimo.
       Por qué debe hacerse: mantener dos capturas indefinidamente duplica el punto de fallo
       humano (olvidar cuál es la buena) sin aportar nada una vez validada la Lambda. Antes de
       apagarlo hay que verificar que no haya huecos y subir a S3 lo que solo exista en local; el
