@@ -3,6 +3,22 @@
 Changelog corto: una entrada por cambio significativo, con el hash del commit. El detalle de
 implementación vive en el commit, no aquí.
 
+## [1104458] 2026-09-19
+La Lambda del snapshot nunca había corrido sola: el rol del scheduler seguía apuntando a la
+función de `us-east-2`, y el rol de ejecución no tenía `s3:ListBucket`, sin el cual S3 responde
+403 en vez de 404 por un objeto ausente y toda corrida sobre un día nuevo fallaba. Ambos fallos
+eran silenciosos y ninguna prueba los había detectado porque ninguna recorrió el camino real
+—scheduler, corrida no forzada, día inexistente—, que queda documentado como la verificación
+canónica. Verificado por ese camino el 2026-09-19 a las 17:23 UTC; no se perdió ningún día.
+
+## [d422f7e] 2026-09-19
+Se adelantan de la Fase 4 los features que no dependen de los datos: estimadores de volatilidad
+con OHLC, ATR, ADX/DI, MFI, CMF, OBV y las primitivas rodantes, con las definiciones de TTR
+verificadas contra su código en C. TTR se usa como catálogo y no se porta entero, porque sus ~50
+indicadores están tan correlacionados que multiplicarían el espacio de búsqueda sin añadir señal.
+Se respetan sus convenciones de NaN y de siembra de la EMA —de ellas depende no mirar al futuro—,
+se excluye `ZigZag` por usar precios posteriores, y cada indicador tiene un test de causalidad.
+
 ## [7c10699] 2026-09-18
 Universo point-in-time: qué pares existían y eran operables en cada fecha, cruzando el índice del
 bucket (que llega a 2017) con los snapshots diarios (que dan los assets y el `status`
